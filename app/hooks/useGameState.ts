@@ -8,6 +8,10 @@ const INITIAL_DECK: (FunctionCard | OperatorCard)[] = [
   { id: 'i1', name: '積分', type: 'operator', operatorType: 'integral', description: '関数を積分する' },
   { id: 'l_inf', name: '極限(∞)', type: 'operator', operatorType: 'limit_infinity', description: 'x -> ∞' },
   { id: 'l_sup', name: '上極限', type: 'operator', operatorType: 'limit_sup', description: 'lim sup (最大値)' },
+  { id: 'op_mul', name: '乗算', type: 'operator', operatorType: 'multiply', description: '手札の関数と掛け合わせる' },
+  { id: 'op_div', name: '除算', type: 'operator', operatorType: 'divide', description: '手札の関数で割る' },
+  { id: 'op_log', name: 'log', type: 'operator', operatorType: 'log', description: '自然対数をとる' },
+  { id: 'op_sqrt', name: '√', type: 'operator', operatorType: 'sqrt', description: '平方根をとる' },
   { id: 'f1', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数' }, // exp(x) for sympy
   { id: 'f2', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数' },
 ];
@@ -25,13 +29,13 @@ export function useGameState() {
     phase: 'draw',
     player: {
       id: 'player',
-      field: [...INITIAL_FIELD],
+      field: INITIAL_FIELD.map(c => ({ ...c, id: `p1_${c.id}` })),
       hand: [],
       deck: [...INITIAL_DECK],
     },
     opponent: {
       id: 'opponent',
-      field: [...INITIAL_FIELD],
+      field: INITIAL_FIELD.map(c => ({ ...c, id: `p2_${c.id}` })),
       hand: [],
       deck: [...INITIAL_DECK],
     },
@@ -50,73 +54,111 @@ export function useGameState() {
         uniqueField.push(card);
         seenExpressions.add(expr);
       } else {
-        console.log(`Linear dependence detected: ${card.name} is removed.`);
+        console.log(`[LinearDependence] Removing duplicate: ${card.name} (${expr})`);
       }
     }
     return uniqueField;
   };
 
-  const applyOperator = useCallback(async (operator: OperatorCard, targetId: string, targetPlayerId: string) => {
-    // 現在のプレイヤーしか操作できない
-    setGameState(current => {
-       if (current.winner) return current;
-       // ターンプレイヤーチェックを入れるべきだが、
-       // UI側で制御するか、ここで弾くか。
-       // いったん「自分のターンに相手を操作」などはあり得るので、
-       // 「operatorを持っているのがcurrentPlayerか」を確認すべきだが省略。
-       return current;
-    });
-
-    // 状態を一旦取得して計算 (非同期中)
-    // 注意: setGameState(prev => ...) の中で非同期処理はできないため、
-    // 必要な情報を取得してから計算し、再度setStateする。
-    
-    // しかしターゲットカードの特定が必要。
-    // ここでは簡略化のため、stateの参照を使う（競合の可能性はあるがターン制なので許容）
-    
-    // 本当は useReducer や サーバー側で状態管理すべきだが、
-    // ここでは楽観的に現在のstateを使って計算リクエストを投げる。
-    
-    let targetCard: FunctionCard | undefined;
-    
-    // 現在の状態を取得するためのトリック（setGameStateのコールバックを利用しない場合、closureのgameStateは古い可能性がある）
-    // 今回はuseGameStateの戻り値を使っているcomponent側から渡される引数で判断するしかないが、
-    // applyOperator内で最新のstateを参照するには useRef を使うか、setState内で完結させる必要がある。
-    // しかし非同期なので setState内完結は無理。
-    
-    // よって、「計算前の仮更新（UI反応）」と「計算後の確定更新」に分けるか、
-    // 単純にawaitしてから更新するか。後者で行く。
-    
+  const deployFunction = useCallback((cardId: string, targetPlayerId: string) => {
     setGameState(prev => {
-        const targetPlayer = targetPlayerId === 'player' ? prev.player : prev.opponent;
-        targetCard = targetPlayer.field.find(c => c.id === targetId);
-        return prev;
+        if (prev.winner) return prev;
+
+        const newState = { ...prev };
+        newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand] };
+        newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand] };
+
+        const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+        const cardIndex = currentPlayerState.hand.findIndex(c => c.id === cardId);
+        
+        if (cardIndex === -1) return prev;
+        
+        const card = currentPlayerState.hand[cardIndex];
+        if (card.type !== 'function') return prev;
+
+        // 手札から削除
+        currentPlayerState.hand.splice(cardIndex, 1);
+
+        // 対象フィールドに追加
+        const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
+        const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
+        targetPlayerState.field.push(newCard);
+        
+        // ターン終了判定を入れるならここだが、アクション後の処理はUI側で制御するか、あるいは自動でエンドではない
+
+        return newState;
     });
+  }, []);
 
-    if (!targetCard) return;
+  const applyOperator = useCallback(async (
+    operators: OperatorCard[], // 配列に変更
+    targetId: string, 
+    targetPlayerId: string,
+    targetCard: FunctionCard, // UIから渡された対象カード
+    operandCard?: FunctionCard // UIから渡されたオペランドカード
+  ) => {
+    console.log(`[applyOperator] Start. TargetID: ${targetId}, Operators:`, operators.map(o => o.operatorType));
 
-    let result: CalculationResult = { expression: targetCard.expression, latex: targetCard.latex, isZero: false };
+    let operandExpression: string | undefined;
+    if (operandCard) {
+        operandExpression = operandCard.expression;
+        console.log(`[applyOperator] Operand Expression: ${operandExpression}`);
+    }
+
+    // 乗算・除算の場合はオペランドが必須 (単体演算子の場合)
+    if (operators.length === 1) {
+        const opType = operators[0].operatorType;
+        if ((opType === 'multiply' || opType === 'divide') && !operandExpression) {
+            console.error("Operand required for multiply/divide");
+            return;
+        }
+    }
+
+    // 順次適用
+    let currentResult: CalculationResult = { expression: targetCard.expression, latex: targetCard.latex, isZero: false };
 
     try {
-      switch (operator.operatorType) {
-        case 'differential':
-          result = await MathEngine.differentiate(targetCard.expression);
-          break;
-        case 'integral':
-          result = await MathEngine.integrate(targetCard.expression);
-          break;
-        case 'limit_infinity':
-          result = await MathEngine.limit(targetCard.expression, 'infinity');
-          break;
-        case 'limit_0':
-          result = await MathEngine.limit(targetCard.expression, '0');
-          break;
-        case 'limit_sup':
-          result = await MathEngine.limit(targetCard.expression, 'sup');
-          break;
-        case 'limit_inf':
-          result = await MathEngine.limit(targetCard.expression, 'inf');
-          break;
+      for (const operator of operators) {
+          // すでに0になっていたら計算不要
+          if (currentResult.isZero) break;
+
+          console.log(`[Math] Executing ${operator.operatorType} on ${currentResult.expression}`);
+          let nextResult: CalculationResult = currentResult;
+
+          switch (operator.operatorType) {
+            case 'differential':
+              nextResult = await MathEngine.differentiate(currentResult.expression);
+              break;
+            case 'integral':
+              nextResult = await MathEngine.integrate(currentResult.expression);
+              break;
+            case 'limit_infinity':
+              nextResult = await MathEngine.limit(currentResult.expression, 'infinity');
+              break;
+            case 'limit_0':
+              nextResult = await MathEngine.limit(currentResult.expression, '0');
+              break;
+            case 'limit_sup':
+              nextResult = await MathEngine.limit(currentResult.expression, 'sup');
+              break;
+            case 'limit_inf':
+              nextResult = await MathEngine.limit(currentResult.expression, 'inf');
+              break;
+            case 'multiply':
+              if (operandExpression) nextResult = await MathEngine.multiply(currentResult.expression, operandExpression);
+              break;
+            case 'divide':
+              if (operandExpression) nextResult = await MathEngine.divide(currentResult.expression, operandExpression);
+              break;
+            case 'log':
+              nextResult = await MathEngine.log(currentResult.expression);
+              break;
+            case 'sqrt':
+              nextResult = await MathEngine.sqrt(currentResult.expression);
+              break;
+          }
+          currentResult = nextResult;
+          console.log(`[Math] Result:`, currentResult);
       }
     } catch(e) {
       console.error(e);
@@ -124,34 +166,55 @@ export function useGameState() {
     }
 
     setGameState(prev => {
+      console.log('[Update] Applying state update');
       const newState = { ...prev };
-      // プレイヤーと相手の状態をディープコピーしないとネストされたオブジェクトが更新されない
       newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand] };
       newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand] };
 
       const targetPlayer = targetPlayerId === 'player' ? newState.player : newState.opponent;
       const targetCardIndex = targetPlayer.field.findIndex(c => c.id === targetId);
       
+      console.log(`[Update] Target Index: ${targetCardIndex}`);
+
       if (targetCardIndex !== -1) {
-        if (result.isZero) {
+        if (currentResult.isZero) {
+          console.log('[Update] Card removed (isZero)');
           targetPlayer.field.splice(targetCardIndex, 1);
         } else {
+          const oldId = targetPlayer.field[targetCardIndex].id;
+          const newId = `${oldId.split('_u_')[0]}_u_${Date.now()}`;
+          console.log(`[Update] Updating card ${oldId} -> ${newId} with expression: ${currentResult.expression}`);
+          
           targetPlayer.field[targetCardIndex] = {
             ...targetPlayer.field[targetCardIndex],
-            expression: result.expression,
-            latex: result.latex,
-            name: result.expression
+            // IDを更新して再レンダリングを強制する
+            id: newId,
+            expression: currentResult.expression,
+            latex: currentResult.latex,
+            name: currentResult.expression
           };
         }
-        // 線形従属チェック
         targetPlayer.field = checkLinearDependence(targetPlayer.field);
+      } else {
+          console.warn(`[Update] Target card ${targetId} not found during update phase.`);
       }
 
-      // 手札消費
+      // 手札消費: 演算子カード（すべて消費）
       const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
-      const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
-      if (opIndex !== -1) {
-        currentPlayerState.hand.splice(opIndex, 1);
+      
+      for (const operator of operators) {
+          const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
+          if (opIndex !== -1) {
+            currentPlayerState.hand.splice(opIndex, 1);
+          }
+      }
+
+      // 手札消費: オペランドとして使った関数カード
+      if (operandCard) {
+          const operandIndex = currentPlayerState.hand.findIndex(c => c.id === operandCard.id);
+          if (operandIndex !== -1) {
+              currentPlayerState.hand.splice(operandIndex, 1);
+          }
       }
 
       // 勝利判定
@@ -180,7 +243,6 @@ export function useGameState() {
       
       const card = currentPlayerState.deck.pop();
       if (card) {
-        // IDを一意にする
         currentPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}` });
       }
       return newState;
@@ -198,6 +260,7 @@ export function useGameState() {
   return {
     gameState,
     applyOperator,
+    deployFunction,
     drawCard,
     endTurn
   };

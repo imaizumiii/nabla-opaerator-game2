@@ -1,13 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol
+from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt
 import sympy
 
 app = FastAPI()
 
 class CalculationRequest(BaseModel):
     expression: str
-    operation: str  # differentiate, integrate, limit_infinity, limit_0, limit_sup, limit_inf
+    operation: str  # differentiate, integrate, limit_infinity, limit_0, limit_sup, limit_inf, multiply, divide, log, sqrt
+    operand: str | None = None # 乗算・除算用の第2引数
     
 class CalculationResponse(BaseModel):
     expression: str
@@ -19,7 +20,8 @@ async def calculate(req: CalculationRequest):
     try:
         # 文字列をSymPyの式に変換
         # セキュリティ上のリスクがあるため、本来は入力を厳密に検証すべきだがプロトタイプとして許可
-        x = Symbol('x')
+        # real=Trueを追加して簡約化を促進 (log(exp(x)) -> x など)
+        x = Symbol('x', real=True)
         expr = sympify(req.expression, locals={'x': x})
         
         result = None
@@ -54,6 +56,29 @@ async def calculate(req: CalculationRequest):
                  result = sympify(-1)
             else:
                  result = limit(expr, x, oo)
+
+        elif req.operation == 'multiply':
+            if not req.operand:
+                raise HTTPException(status_code=400, detail="Operand required for multiplication")
+            op_expr = sympify(req.operand, locals={'x': x})
+            result = expr * op_expr
+
+        elif req.operation == 'divide':
+            if not req.operand:
+                raise HTTPException(status_code=400, detail="Operand required for division")
+            op_expr = sympify(req.operand, locals={'x': x})
+            # 簡易ゼロ割チェック
+            if op_expr == 0:
+                 raise HTTPException(status_code=400, detail="Division by zero")
+            result = expr / op_expr
+
+        elif req.operation == 'log':
+            # 自然対数
+            result = log(expr)
+
+        elif req.operation == 'sqrt':
+            # 平方根
+            result = sqrt(expr)
 
         else:
             raise HTTPException(status_code=400, detail="Unknown operation")

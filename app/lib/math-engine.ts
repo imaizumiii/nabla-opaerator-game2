@@ -22,12 +22,31 @@ export class MathEngine {
     return this.callApi(expression, operation);
   }
 
-  private static async callApi(expression: string, operation: string): Promise<CalculationResult> {
+  static async multiply(expression: string, operand: string): Promise<CalculationResult> {
+    return this.callApi(expression, 'multiply', operand);
+  }
+
+  static async divide(expression: string, operand: string): Promise<CalculationResult> {
+    return this.callApi(expression, 'divide', operand);
+  }
+
+  static async log(expression: string): Promise<CalculationResult> {
+    return this.callApi(expression, 'log');
+  }
+
+  static async sqrt(expression: string): Promise<CalculationResult> {
+    return this.callApi(expression, 'sqrt');
+  }
+
+  private static async callApi(expression: string, operation: string, operand?: string): Promise<CalculationResult> {
     try {
+      const body: any = { expression, operation };
+      if (operand) body.operand = operand;
+
       const res = await fetch('/api/py/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expression, operation }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);

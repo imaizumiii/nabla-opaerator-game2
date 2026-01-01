@@ -11,7 +11,9 @@ export type OperatorType =
   | 'limit_sup'    // 上極限
   | 'limit_inf'    // 下極限
   | 'multiply'     // 乗算
-  | 'divide';      // 除算
+  | 'divide'       // 除算
+  | 'log'          // 対数
+  | 'sqrt';        // 平方根
 
 export interface Card {
   id: string;
