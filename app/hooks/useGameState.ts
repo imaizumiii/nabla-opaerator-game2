@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { GameState, PlayerState, FunctionCard, OperatorCard } from '../types/game';
 import { MathEngine, CalculationResult } from '../lib/math-engine';
 
@@ -22,6 +22,15 @@ const INITIAL_FIELD: FunctionCard[] = [
   { id: 'basis_x2', name: 'x^2', type: 'function', expression: 'x**2', latex: 'x^2', description: '二次関数' }, // x**2 for sympy
 ];
 
+const shuffleDeck = <T>(array: T[]): T[] => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
     turnCount: 1,
@@ -31,16 +40,48 @@ export function useGameState() {
       id: 'player',
       field: INITIAL_FIELD.map(c => ({ ...c, id: `p1_${c.id}` })),
       hand: [],
-      deck: [...INITIAL_DECK],
+      deck: [...INITIAL_DECK], // Hydration Mismatchを防ぐため、初期状態はシャッフルしない
     },
     opponent: {
       id: 'opponent',
       field: INITIAL_FIELD.map(c => ({ ...c, id: `p2_${c.id}` })),
       hand: [],
-      deck: [...INITIAL_DECK],
+      deck: [...INITIAL_DECK], // Hydration Mismatchを防ぐため、初期状態はシャッフルしない
     },
     winner: null,
   });
+
+  // 初回レンダリング後（クライアントサイド）に初期ドローとシャッフルを実行
+  useEffect(() => {
+    setGameState(prev => {
+        // 既に手札がある場合は初期化済みとみなす
+        if (prev.player.hand.length > 0) return prev;
+
+        const newState = { ...prev };
+        
+        // デッキをシャッフル
+        newState.player.deck = shuffleDeck([...INITIAL_DECK]);
+        newState.opponent.deck = shuffleDeck([...INITIAL_DECK]);
+        
+        // プレイヤー1の初期ドロー (7枚)
+        while (newState.player.hand.length < 7 && newState.player.deck.length > 0) {
+            const card = newState.player.deck.pop();
+            if (card) {
+                newState.player.hand.push({ ...card, id: `${card.id}_init_${Date.now()}_${newState.player.hand.length}` });
+            }
+        }
+        
+        // プレイヤー2(CPU)の初期ドロー (7枚) - こちらもやっておくべき
+        while (newState.opponent.hand.length < 7 && newState.opponent.deck.length > 0) {
+            const card = newState.opponent.deck.pop();
+            if (card) {
+                newState.opponent.hand.push({ ...card, id: `${card.id}_init_${Date.now()}_${newState.opponent.hand.length}` });
+            }
+        }
+
+        return newState;
+    });
+  }, []);
 
   const checkLinearDependence = (field: FunctionCard[]): FunctionCard[] => {
     const uniqueField: FunctionCard[] = [];
@@ -65,8 +106,8 @@ export function useGameState() {
         if (prev.winner) return prev;
 
         const newState = { ...prev };
-        newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand] };
-        newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand] };
+        newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
+        newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
 
         const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
         const cardIndex = currentPlayerState.hand.findIndex(c => c.id === cardId);
@@ -81,10 +122,35 @@ export function useGameState() {
 
         // 対象フィールドに追加
         const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
-        const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
-        targetPlayerState.field.push(newCard);
         
-        // ターン終了判定を入れるならここだが、アクション後の処理はUI側で制御するか、あるいは自動でエンドではない
+        // フィールド枚数制限 (3枚まで)
+        if (targetPlayerState.field.length >= 3) {
+            console.warn("Field is full (max 3 cards).");
+            return prev;
+        }
+
+        // 線形従属チェック（既に同じ関数がある場合は消滅）
+        const isDuplicate = targetPlayerState.field.some(c => c.expression === card.expression);
+        if (isDuplicate) {
+            console.log(`[Deploy] Duplicate detected: ${card.name} (${card.expression}) vanishes.`);
+            // フィールドには追加しない
+        } else {
+            const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
+            targetPlayerState.field.push(newCard);
+        }
+        
+        // ターン終了処理 (関数展開後も自動でターン終了)
+        newState.turnCount = prev.turnCount + 1;
+        newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
+
+        // 次のプレイヤーの自動ドロー
+        const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+        while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+          const card = nextPlayerState.deck.pop();
+          if (card) {
+            nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+          }
+        }
 
         return newState;
     });
@@ -168,8 +234,9 @@ export function useGameState() {
     setGameState(prev => {
       console.log('[Update] Applying state update');
       const newState = { ...prev };
-      newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand] };
-      newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand] };
+      // 状態更新時はデッキも含めてshallow copyを作成する
+      newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
+      newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
 
       const targetPlayer = targetPlayerId === 'player' ? newState.player : newState.opponent;
       const targetCardIndex = targetPlayer.field.findIndex(c => c.id === targetId);
@@ -224,6 +291,21 @@ export function useGameState() {
         newState.winner = 'opponent';
       }
 
+      // 計算完了時に自動でターン終了（勝負が決まっていない場合）
+      if (!newState.winner) {
+        newState.turnCount = prev.turnCount + 1;
+        newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
+
+        // 次のプレイヤーの自動ドロー
+        const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+        while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+          const card = nextPlayerState.deck.pop();
+          if (card) {
+            nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+          }
+        }
+      }
+
       return newState;
     });
 
@@ -239,22 +321,36 @@ export function useGameState() {
 
       const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
 
-      if (currentPlayerState.deck.length === 0) return prev;
-      
-      const card = currentPlayerState.deck.pop();
-      if (card) {
-        currentPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}` });
+      while (currentPlayerState.hand.length < 7 && currentPlayerState.deck.length > 0) {
+        const card = currentPlayerState.deck.pop();
+        if (card) {
+          currentPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${currentPlayerState.hand.length}` });
+        }
       }
+      
       return newState;
     });
   }, []);
 
   const endTurn = useCallback(() => {
-    setGameState(prev => ({
-      ...prev,
-      turnCount: prev.turnCount + 1,
-      currentPlayer: prev.currentPlayer === 'player' ? 'opponent' : 'player',
-    }));
+    setGameState(prev => {
+      const newState = { ...prev, 
+        turnCount: prev.turnCount + 1,
+        currentPlayer: prev.currentPlayer === 'player' ? 'opponent' : 'player',
+        player: { ...prev.player, hand: [...prev.player.hand], deck: [...prev.player.deck] },
+        opponent: { ...prev.opponent, hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] },
+      };
+
+      // 次のプレイヤーの自動ドロー
+      const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+      while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+        const card = nextPlayerState.deck.pop();
+        if (card) {
+          nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+        }
+      }
+      return newState;
+    });
   }, []);
 
   return {

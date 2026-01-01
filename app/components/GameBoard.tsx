@@ -80,6 +80,17 @@ export const GameBoard: React.FC = () => {
   };
 
   const handleFieldCardClick = (targetId: string, isPlayerField: boolean) => {
+    // 既存の処理（ターゲット指定など）
+    executeFieldAction(targetId, isPlayerField);
+  };
+
+  const handleFieldAreaClick = (isPlayerField: boolean) => {
+    // フィールド全体をクリックしたときの処理
+    // ターゲットIDなしで実行を試みる（主にDeploy用）
+    executeFieldAction(null, isPlayerField);
+  };
+
+  const executeFieldAction = (targetId: string | null, isPlayerField: boolean) => {
     const selectedCards = selectedHandCardIds
       .map(id => findHandCard(id))
       .filter((c): c is GameCard => c !== undefined);
@@ -91,12 +102,29 @@ export const GameBoard: React.FC = () => {
     // パターンA: 関数カードのみ (Deploy)
     if (selectedCards.every(c => c.type === 'function')) {
         if (selectedCards.length !== 1) return; // 基本的に1枚
+
+        // フィールド上限チェック
+        const currentField = isPlayerField ? gameState.player.field : gameState.opponent.field;
+        if (currentField.length >= 3) {
+            alert("Maximum of 3 function cards allowed on the field.");
+            return;
+        }
+
+        // 線形従属（重複）チェック - 警告を表示
+        const isDuplicate = currentField.some(c => c.expression === selectedCards[0].expression);
+        if (isDuplicate) {
+            const proceed = window.confirm("警告：この関数カードは既に場に存在するため、配置しても次元の冗長性により消滅します（手札から失われます）。実行しますか？");
+            if (!proceed) return;
+        }
+
         deployFunction(selectedCards[0].id, targetOwnerId);
         setSelectedHandCardIds([]);
         return;
     }
 
-    // パターンB: 演算子実行
+    // パターンB: 演算子実行 (ターゲット必須)
+    if (!targetId) return; // 演算子の場合はカード指定が必須
+
     const operators = selectedCards.filter(c => c.type === 'operator') as OperatorCard[];
     const functions = selectedCards.filter(c => c.type === 'function') as FunctionCard[];
 
@@ -193,30 +221,50 @@ export const GameBoard: React.FC = () => {
       </div>
 
       {/* Opponent Field (Player 2) */}
-      <div className={`flex-1 p-4 rounded-xl border-2 flex flex-col items-center justify-center relative transition-colors ${!isPlayerTurn ? 'bg-yellow-50 border-yellow-300' : 'bg-red-50 border-red-200'}`}>
-        <div className="absolute top-2 left-2 text-gray-800 font-bold opacity-50">Player 2 Field (Opponent)</div>
-        <div className="flex gap-4 flex-wrap justify-center">
+      <div 
+        className={`flex-1 p-4 rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer ${!isPlayerTurn ? 'bg-red-100 border-4 border-red-500 shadow-lg' : 'bg-gray-100 border-2 border-gray-300 opacity-80'}`}
+        onClick={(e) => {
+            // カードクリックイベントがバブリングしてきた場合は無視したいが、
+            // Reactのイベント伝播だと単純な判定が難しい場合もあるため、
+            // CardComponentのonClickでstopPropagationするのが確実。
+            // ここでは簡易的にターゲットが自分自身(div)であれば実行するようにする。
+            if (e.target === e.currentTarget) {
+                handleFieldAreaClick(false);
+            }
+        }}
+      >
+        <div className="absolute top-2 left-2 text-gray-800 font-bold opacity-50 pointer-events-none">Player 2 Field (Opponent) { !isPlayerTurn && " [TURN]" }</div>
+        <div className="flex gap-4 flex-wrap justify-center pointer-events-none">
           {gameState.opponent.field.map(card => (
-            <CardComponent 
-              key={card.id} 
-              card={card} 
-              onClick={() => handleFieldCardClick(card.id, false)}
-            />
+            <div key={card.id} className="pointer-events-auto">
+                <CardComponent 
+                card={card} 
+                onClick={() => handleFieldCardClick(card.id, false)}
+                />
+            </div>
           ))}
           {gameState.opponent.field.length === 0 && <div className="text-red-400 font-bold text-2xl">0 Dimension (LOSE)</div>}
         </div>
       </div>
 
       {/* Player Field (Player 1) */}
-      <div className={`flex-1 p-4 rounded-xl border-2 flex flex-col items-center justify-center relative transition-colors ${isPlayerTurn ? 'bg-yellow-50 border-yellow-300' : 'bg-blue-50 border-blue-200'}`}>
-        <div className="absolute top-2 left-2 text-gray-800 font-bold opacity-50">Player 1 Field (You)</div>
-        <div className="flex gap-4 flex-wrap justify-center">
+      <div 
+        className={`flex-1 p-4 rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer ${isPlayerTurn ? 'bg-blue-100 border-4 border-blue-500 shadow-lg' : 'bg-gray-100 border-2 border-gray-300 opacity-80'}`}
+        onClick={(e) => {
+            if (e.target === e.currentTarget) {
+                handleFieldAreaClick(true);
+            }
+        }}
+      >
+        <div className="absolute top-2 left-2 text-gray-800 font-bold opacity-50 pointer-events-none">Player 1 Field (You) { isPlayerTurn && " [TURN]" }</div>
+        <div className="flex gap-4 flex-wrap justify-center pointer-events-none">
           {gameState.player.field.map(card => (
-            <CardComponent 
-              key={card.id} 
-              card={card} 
-              onClick={() => handleFieldCardClick(card.id, true)}
-            />
+            <div key={card.id} className="pointer-events-auto">
+                <CardComponent 
+                card={card} 
+                onClick={() => handleFieldCardClick(card.id, true)}
+                />
+            </div>
           ))}
           {gameState.player.field.length === 0 && <div className="text-red-500 font-bold text-2xl">0 Dimension (LOSE)</div>}
         </div>
