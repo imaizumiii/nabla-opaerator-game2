@@ -39,6 +39,10 @@ export class MathEngine {
     return this.callApi(expression, 'sqrt');
   }
 
+  static async inverse(expression: string): Promise<CalculationResult> {
+    return this.callApi(expression, 'inverse');
+  }
+
   private static async callApi(expression: string, operation: string, operand?: string): Promise<CalculationResult> {
     try {
       const body: any = { expression, operation };

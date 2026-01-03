@@ -5,7 +5,8 @@ export type FunctionType = 'constant' | 'polynomial' | 'exponential' | 'trigonom
 export type OperatorType = 
   | 'differential' // 微分
   | 'integral'     // 積分
-  | 'nabla'        // 全体微分
+  | 'nabla'        // 全体微分 (1回)
+  | 'laplacian'    // 全体微分 (2回)
   | 'limit_infinity' // 極限(∞)
   | 'limit_0'      // 極限(0)
   | 'limit_sup'    // 上極限
@@ -13,7 +14,8 @@ export type OperatorType =
   | 'multiply'     // 乗算
   | 'divide'       // 除算
   | 'log'          // 対数
-  | 'sqrt';        // 平方根
+  | 'sqrt'         // 平方根
+  | 'inverse';     // 逆関数
 
 export interface Card {
   id: string;

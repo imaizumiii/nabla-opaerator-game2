@@ -122,13 +122,32 @@ export const GameBoard: React.FC = () => {
         return;
     }
 
-    // パターンB: 演算子実行 (ターゲット必須)
-    if (!targetId) return; // 演算子の場合はカード指定が必須
-
+    // パターンB: 演算子実行 (ターゲット必須 or フィールド指定)
     const operators = selectedCards.filter(c => c.type === 'operator') as OperatorCard[];
     const functions = selectedCards.filter(c => c.type === 'function') as FunctionCard[];
 
+    // ナブラ/ラプラシアンの全体攻撃対応
     if (operators.length > 0) {
+        // フィールド全体をターゲットにする演算子かどうか
+        const isAoE = operators.some(op => op.operatorType === 'nabla' || op.operatorType === 'laplacian');
+
+        if (isAoE) {
+            // AoEの場合は、ターゲットIDがなくても（フィールドクリック等で）実行可能
+            // ただし、ターゲットIDが指定されている場合はそのカードのオーナーフィールドを優先
+            // executeFieldActionの引数 targetId は「クリックされたカード」または null
+            
+            // 処理対象のプレイヤーID
+            const aoETargetOwnerId = isPlayerField ? 'player' : 'opponent';
+
+            applyOperator(operators, null, aoETargetOwnerId, null, functions[0]); // functions[0] is undefined usually
+            setSelectedHandCardIds([]);
+            return;
+        }
+
+        // 通常演算子はターゲットID必須
+        if (!targetId) return;
+        
+        // ... (以下、既存の通常処理)
       // ターゲットカードの情報を取得
       const targetField = isPlayerField ? gameState.player.field : gameState.opponent.field;
       const targetCard = targetField.find(c => c.id === targetId);

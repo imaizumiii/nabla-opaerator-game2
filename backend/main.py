@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly
+from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly, solve
 import sympy
 
 app = FastAPI()
 
 class CalculationRequest(BaseModel):
     expression: str
-    operation: str  # differentiate, integrate, limit_infinity, limit_0, limit_sup, limit_inf, multiply, divide, log, sqrt
+    operation: str  # differentiate, integrate, limit_infinity, limit_0, limit_sup, limit_inf, multiply, divide, log, sqrt, inverse
     operand: str | None = None # 乗算・除算用の第2引数
     
 class CalculationResponse(BaseModel):
@@ -85,12 +85,11 @@ async def calculate(req: CalculationRequest):
                  result = limit(expr, x, oo) # 振動しなければ通常の極限と同じとみなす(簡易)
 
         elif req.operation == 'limit_inf':
-            # 下極限
-            expr_str = str(expr)
-            if 'sin' in expr_str or 'cos' in expr_str:
-                 result = sympify(-1)
-            else:
-                 result = limit(expr, x, oo)
+            # 負の無限大への極限 (x -> -∞)
+            # note: 以前の実装では下極限(liminf)的な処理が入っていたが、
+            # ゲームルール上「極限(-∞)」の方が一般的かつ実装しやすいため変更
+            # もし「下極限」カードが必要なら別オペレーションとして定義すべき
+            result = limit(expr, x, -oo)
 
         elif req.operation == 'multiply':
             if not req.operand:
@@ -114,6 +113,23 @@ async def calculate(req: CalculationRequest):
         elif req.operation == 'sqrt':
             # 平方根
             result = sqrt(expr)
+
+        elif req.operation == 'inverse':
+            # 逆関数 (f^-1(x))
+            # y = f(x) を x について解く -> x = g(y) -> g(x) を返す
+            y = Symbol('y', real=True)
+            # 方程式 y = expr を x について解く
+            solutions = solve(y - expr, x)
+            
+            if not solutions:
+                raise HTTPException(status_code=400, detail="Inverse function not found")
+            
+            # 解が複数ある場合、簡易的に最後の解を採用 (例: x^2 -> sqrt(y))
+            # sin(x) -> asin(y) (主値)
+            sol = solutions[-1]
+            
+            # y を x に置換して関数形に戻す
+            result = sol.subs(y, x)
 
         else:
             raise HTTPException(status_code=400, detail="Unknown operation")

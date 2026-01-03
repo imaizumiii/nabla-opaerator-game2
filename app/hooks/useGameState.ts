@@ -3,17 +3,57 @@ import { GameState, PlayerState, FunctionCard, OperatorCard } from '../types/gam
 import { MathEngine, CalculationResult } from '../lib/math-engine';
 
 const INITIAL_DECK: (FunctionCard | OperatorCard)[] = [
+  // 微分系
   { id: 'd1', name: '微分', type: 'operator', operatorType: 'differential', description: '関数を微分する' },
   { id: 'd2', name: '微分', type: 'operator', operatorType: 'differential', description: '関数を微分する' },
+  { id: 'nabla1', name: 'ナブラ', type: 'operator', operatorType: 'nabla', description: '場の全関数を微分' },
+  { id: 'nabla2', name: 'ナブラ', type: 'operator', operatorType: 'nabla', description: '場の全関数を微分' },
+  { id: 'lap1', name: 'ラプラシアン', type: 'operator', operatorType: 'laplacian', description: '場の全関数を2回微分' },
+  { id: 'lap2', name: 'ラプラシアン', type: 'operator', operatorType: 'laplacian', description: '場の全関数を2回微分' },
+  
+  // 積分系
   { id: 'i1', name: '積分', type: 'operator', operatorType: 'integral', description: '関数を積分する' },
-  { id: 'l_inf', name: '極限(∞)', type: 'operator', operatorType: 'limit_infinity', description: 'x -> ∞' },
-  { id: 'l_sup', name: '上極限', type: 'operator', operatorType: 'limit_sup', description: 'lim sup (最大値)' },
-  { id: 'op_mul', name: '乗算', type: 'operator', operatorType: 'multiply', description: '手札の関数と掛け合わせる' },
-  { id: 'op_div', name: '除算', type: 'operator', operatorType: 'divide', description: '手札の関数で割る' },
-  { id: 'op_log', name: 'log', type: 'operator', operatorType: 'log', description: '自然対数をとる' },
-  { id: 'op_sqrt', name: '√', type: 'operator', operatorType: 'sqrt', description: '平方根をとる' },
-  { id: 'f1', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数', normalizedExpression: 'exp(x)' }, // exp(x) for sympy
-  { id: 'f2', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数', normalizedExpression: 'sin(x)' },
+  { id: 'i2', name: '積分', type: 'operator', operatorType: 'integral', description: '関数を積分する' },
+
+  // 極限系
+  { id: 'l_inf1', name: '極限(∞)', type: 'operator', operatorType: 'limit_infinity', description: 'x -> ∞' },
+  { id: 'l_inf2', name: '極限(∞)', type: 'operator', operatorType: 'limit_infinity', description: 'x -> ∞' },
+  { id: 'l_minf1', name: '極限(-∞)', type: 'operator', operatorType: 'limit_inf', description: 'x -> -∞' },
+  { id: 'l_minf2', name: '極限(-∞)', type: 'operator', operatorType: 'limit_inf', description: 'x -> -∞' },
+  { id: 'l_0_1', name: '極限(0)', type: 'operator', operatorType: 'limit_0', description: 'x -> 0' },
+  { id: 'l_0_2', name: '極限(0)', type: 'operator', operatorType: 'limit_0', description: 'x -> 0' },
+  { id: 'l_sup1', name: '上極限', type: 'operator', operatorType: 'limit_sup', description: 'lim sup (最大値)' },
+  { id: 'l_sup2', name: '上極限', type: 'operator', operatorType: 'limit_sup', description: 'lim sup (最大値)' },
+
+  // 代数演算系
+  { id: 'op_mul1', name: '乗算', type: 'operator', operatorType: 'multiply', description: '手札の関数と掛け合わせる' },
+  { id: 'op_mul2', name: '乗算', type: 'operator', operatorType: 'multiply', description: '手札の関数と掛け合わせる' },
+  { id: 'op_div1', name: '除算', type: 'operator', operatorType: 'divide', description: '手札の関数で割る' },
+  { id: 'op_div2', name: '除算', type: 'operator', operatorType: 'divide', description: '手札の関数で割る' },
+  { id: 'op_log1', name: 'log', type: 'operator', operatorType: 'log', description: '自然対数をとる' },
+  { id: 'op_log2', name: 'log', type: 'operator', operatorType: 'log', description: '自然対数をとる' },
+  { id: 'op_sqrt1', name: '√', type: 'operator', operatorType: 'sqrt', description: '平方根をとる' },
+  { id: 'op_sqrt2', name: '√', type: 'operator', operatorType: 'sqrt', description: '平方根をとる' },
+  { id: 'op_inv1', name: '逆関数', type: 'operator', operatorType: 'inverse', description: 'f^-1(x)' },
+  { id: 'op_inv2', name: '逆関数', type: 'operator', operatorType: 'inverse', description: 'f^-1(x)' },
+
+  // 関数カード
+  { id: 'f1_1', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数', normalizedExpression: 'exp(x)' },
+  { id: 'f1_2', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数', normalizedExpression: 'exp(x)' },
+  { id: 'f2_1', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数', normalizedExpression: 'sin(x)' },
+  { id: 'f2_2', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数', normalizedExpression: 'sin(x)' },
+  
+  // 追加関数
+  { id: 'f_cos1', name: 'cos(x)', type: 'function', expression: 'cos(x)', latex: '\\cos(x)', description: '余弦関数', normalizedExpression: 'cos(x)' },
+  { id: 'f_cos2', name: 'cos(x)', type: 'function', expression: 'cos(x)', latex: '\\cos(x)', description: '余弦関数', normalizedExpression: 'cos(x)' },
+  { id: 'f_x1', name: 'x', type: 'function', expression: 'x', latex: 'x', description: '一次関数', normalizedExpression: 'x' },
+  { id: 'f_x2', name: 'x', type: 'function', expression: 'x', latex: 'x', description: '一次関数', normalizedExpression: 'x' },
+  { id: 'f_x2_1', name: 'x^2', type: 'function', expression: 'x**2', latex: 'x^2', description: '二次関数', normalizedExpression: 'x**2' },
+  { id: 'f_x2_2', name: 'x^2', type: 'function', expression: 'x**2', latex: 'x^2', description: '二次関数', normalizedExpression: 'x**2' },
+  { id: 'f_1_1', name: '1', type: 'function', expression: '1', latex: '1', description: '定数関数', normalizedExpression: '1' },
+  { id: 'f_1_2', name: '1', type: 'function', expression: '1', latex: '1', description: '定数関数', normalizedExpression: '1' },
+  { id: 'f_0_1', name: '0', type: 'function', expression: '0', latex: '0', description: 'ゼロ関数', normalizedExpression: '0' },
+  { id: 'f_0_2', name: '0', type: 'function', expression: '0', latex: '0', description: 'ゼロ関数', normalizedExpression: '0' },
 ];
 
 const INITIAL_FIELD: FunctionCard[] = [
@@ -159,14 +199,126 @@ export function useGameState() {
   }, []);
 
   const applyOperator = useCallback(async (
-    operators: OperatorCard[], // 配列に変更
-    targetId: string, 
+    operators: OperatorCard[], 
+    targetId: string | null, // null許容
     targetPlayerId: string,
-    targetCard: FunctionCard, // UIから渡された対象カード
-    operandCard?: FunctionCard // UIから渡されたオペランドカード
+    targetCard: FunctionCard | null, // null許容
+    operandCard?: FunctionCard
   ) => {
     console.log(`[applyOperator] Start. TargetID: ${targetId}, Operators:`, operators.map(o => o.operatorType));
 
+    // AoE判定
+    const isNabla = operators.some(o => o.operatorType === 'nabla');
+    const isLaplacian = operators.some(o => o.operatorType === 'laplacian');
+
+    if ((isNabla || isLaplacian) && !targetId) {
+        // 全体攻撃モード
+        console.log('[applyOperator] AoE Mode triggered');
+        
+        // 現在の状態から対象フィールドのカードを取得する必要があるが、
+        // Reactのstate更新関数内で非同期処理をループさせるのは難しいため、
+        // ここで一旦現在のフィールドを取得して計算を行う
+        // ※厳密には stale state の可能性があるが、この関数が呼ばれた時点でのスナップショットで計算する
+        
+        // 現在のgameStateを参照できないため、setStateのコールバック内で計算できないのが辛い。
+        // -> しかし、useGameState内なので gameState は参照可能（クロージャ）
+        // ただし、最新の値でない可能性があるので、targetPlayerId から判断して処理する。
+        
+        // ここでは簡易的に、現在の gameState を参照して計算を開始する。
+        const targetField = targetPlayerId === 'player' ? gameState.player.field : gameState.opponent.field;
+        
+        // 並列で計算実行
+        const results = await Promise.all(targetField.map(async (card) => {
+             let currentResult: CalculationResult = { expression: card.expression, latex: card.latex, isZero: false };
+             
+             // ナブラ: 微分1回
+             if (isNabla) {
+                 currentResult = await MathEngine.differentiate(currentResult.expression);
+             }
+             // ラプラシアン: 微分2回
+             if (isLaplacian) {
+                 const res1 = await MathEngine.differentiate(currentResult.expression);
+                 if (!res1.isZero) {
+                     currentResult = await MathEngine.differentiate(res1.expression);
+                 } else {
+                     currentResult = res1;
+                 }
+             }
+             return { id: card.id, result: currentResult };
+        }));
+
+        setGameState(prev => {
+            const newState = { ...prev };
+            // Deep Copyに近い形で行う
+            newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
+            newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
+            
+            const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
+            const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+
+            // 計算結果を適用
+            results.forEach(({ id, result }) => {
+                const index = targetPlayerState.field.findIndex(c => c.id === id);
+                if (index !== -1) {
+                    if (result.isZero) {
+                        targetPlayerState.field.splice(index, 1);
+                         // spliceでインデックスがずれるとforループだと困るが、findIndexなら都度検索するのでOK
+                         // ただし、mapの結果を適用しているので、IDで探すのが安全
+                    } else {
+                         const oldCard = targetPlayerState.field[index];
+                         targetPlayerState.field[index] = {
+                             ...oldCard,
+                             id: `${oldCard.id.split('_u_')[0]}_u_${Date.now()}`,
+                             expression: result.expression,
+                             latex: result.latex,
+                             name: result.expression,
+                             normalizedExpression: result.normalizedExpression
+                         };
+                    }
+                }
+            });
+
+            // 線形従属チェック
+            targetPlayerState.field = checkLinearDependence(targetPlayerState.field);
+
+            // 手札消費
+            for (const operator of operators) {
+                const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
+                if (opIndex !== -1) {
+                    currentPlayerState.hand.splice(opIndex, 1);
+                }
+            }
+
+            // 勝利判定
+            if (newState.opponent.field.length === 0) {
+                newState.winner = 'player';
+            } else if (newState.player.field.length === 0) {
+                newState.winner = 'opponent';
+            }
+
+             // ターン終了処理
+            if (!newState.winner) {
+                newState.turnCount = prev.turnCount + 1;
+                newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
+
+                const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+                while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+                  const card = nextPlayerState.deck.pop();
+                  if (card) {
+                    nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+                  }
+                }
+            }
+
+            return newState;
+        });
+
+        return; // AoE終了
+    }
+
+    // 通常処理 (Single Target)
+    if (!targetCard) return; // AoE以外でターゲットなしはエラー
+    // ... (以下既存処理)
     let operandExpression: string | undefined;
     if (operandCard) {
         operandExpression = operandCard.expression;
@@ -223,6 +375,9 @@ export function useGameState() {
               break;
             case 'sqrt':
               nextResult = await MathEngine.sqrt(currentResult.expression);
+              break;
+            case 'inverse':
+              nextResult = await MathEngine.inverse(currentResult.expression);
               break;
           }
           currentResult = nextResult;

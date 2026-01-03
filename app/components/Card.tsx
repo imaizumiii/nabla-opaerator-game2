@@ -42,6 +42,15 @@ export const Card: React.FC<CardProps> = ({ card, onClick, isSelected, disabled 
              {card.type === 'operator' && (card as OperatorCard).operatorType === 'integral' && (
               <div className="mt-2 text-xl"><InlineMath math="\int dx" /></div>
             )}
+             {card.type === 'operator' && (card as OperatorCard).operatorType === 'inverse' && (
+              <div className="mt-2 text-xl"><InlineMath math="f^{-1}" /></div>
+            )}
+             {card.type === 'operator' && (card as OperatorCard).operatorType === 'nabla' && (
+              <div className="mt-2 text-xl"><InlineMath math="\nabla" /></div>
+            )}
+             {card.type === 'operator' && (card as OperatorCard).operatorType === 'laplacian' && (
+              <div className="mt-2 text-xl"><InlineMath math="\Delta" /></div>
+            )}
           </div>
         )}
       </div>
