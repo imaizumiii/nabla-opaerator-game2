@@ -2,6 +2,7 @@ export interface CalculationResult {
   expression: string;
   latex: string;
   isZero: boolean;
+  normalizedExpression?: string;
 }
 
 export class MathEngine {
@@ -56,7 +57,8 @@ export class MathEngine {
       return {
         expression: data.expression,
         latex: data.latex,
-        isZero: data.is_zero
+        isZero: data.is_zero,
+        normalizedExpression: data.normalized_expression
       };
     } catch (e) {
       console.error("Math API Error:", e);
@@ -64,7 +66,8 @@ export class MathEngine {
       return {
         expression: expression,
         latex: expression,
-        isZero: false
+        isZero: false,
+        normalizedExpression: expression // フォールバック時はそのまま
       };
     }
   }

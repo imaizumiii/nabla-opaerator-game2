@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt
+from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly
 import sympy
 
 app = FastAPI()
@@ -14,6 +14,41 @@ class CalculationResponse(BaseModel):
     expression: str
     latex: str
     is_zero: bool
+    normalized_expression: str
+
+def normalize_expr(expr, x_symbol):
+    """
+    数式を正規化する。
+    1. 係数の除去 (2x -> x)
+    2. 符号の正規化 (-x -> x)
+    """
+    try:
+        # 1. 係数と原始部分に分離
+        content, prim = expr.as_content_primitive()
+        
+        # 2. 符号の正規化
+        # 多項式として扱えるか試みる
+        try:
+            poly = prim.as_poly(x_symbol)
+            if poly is not None:
+                lc = poly.LC()
+                if lc.is_negative:
+                    prim = -prim
+            else:
+                # as_polyがNoneを返す場合
+                 c, r = prim.as_coeff_Mul()
+                 if c.is_negative:
+                     prim = -prim
+        except sympy.PolificationFailed:
+            # 多項式でない場合(sin(x)など)、as_coeff_Mulで係数チェック
+            c, r = prim.as_coeff_Mul()
+            if c.is_negative:
+                prim = -prim
+                
+        return prim
+    except Exception as e:
+        print(f"Normalization error: {e}")
+        return expr
 
 @app.post("/calculate", response_model=CalculationResponse)
 async def calculate(req: CalculationRequest):
@@ -94,11 +129,16 @@ async def calculate(req: CalculationRequest):
         is_zero_val = False
         if result == 0 or result == oo or result == -oo or result_str == 'nan' or result_str == 'zoo':
             is_zero_val = True
+            
+        # 正規化
+        normalized = normalize_expr(result, x)
+        normalized_str = str(normalized)
 
         return {
-            "expression": result_str.replace('**', '^'), # JS/MathJax向けに調整
+            "expression": result_str, 
             "latex": latex(result),
-            "is_zero": is_zero_val
+            "is_zero": is_zero_val,
+            "normalized_expression": normalized_str
         }
 
     except Exception as e:

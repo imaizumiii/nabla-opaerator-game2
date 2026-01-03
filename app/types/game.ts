@@ -26,6 +26,7 @@ export interface FunctionCard extends Card {
   type: 'function';
   expression: string; // 数式 (mathjs用)
   latex: string;      // 表示用
+  normalizedExpression?: string; // 線形従属判定用 (係数無視)
 }
 
 export interface OperatorCard extends Card {

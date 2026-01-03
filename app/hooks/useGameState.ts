@@ -12,14 +12,14 @@ const INITIAL_DECK: (FunctionCard | OperatorCard)[] = [
   { id: 'op_div', name: '除算', type: 'operator', operatorType: 'divide', description: '手札の関数で割る' },
   { id: 'op_log', name: 'log', type: 'operator', operatorType: 'log', description: '自然対数をとる' },
   { id: 'op_sqrt', name: '√', type: 'operator', operatorType: 'sqrt', description: '平方根をとる' },
-  { id: 'f1', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数' }, // exp(x) for sympy
-  { id: 'f2', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数' },
+  { id: 'f1', name: 'e^x', type: 'function', expression: 'exp(x)', latex: 'e^x', description: '指数関数', normalizedExpression: 'exp(x)' }, // exp(x) for sympy
+  { id: 'f2', name: 'sin(x)', type: 'function', expression: 'sin(x)', latex: '\\sin(x)', description: '正弦関数', normalizedExpression: 'sin(x)' },
 ];
 
 const INITIAL_FIELD: FunctionCard[] = [
-  { id: 'basis_1', name: '1', type: 'function', expression: '1', latex: '1', description: '定数関数' },
-  { id: 'basis_x', name: 'x', type: 'function', expression: 'x', latex: 'x', description: '一次関数' },
-  { id: 'basis_x2', name: 'x^2', type: 'function', expression: 'x**2', latex: 'x^2', description: '二次関数' }, // x**2 for sympy
+  { id: 'basis_1', name: '1', type: 'function', expression: '1', latex: '1', description: '定数関数', normalizedExpression: '1' },
+  { id: 'basis_x', name: 'x', type: 'function', expression: 'x', latex: 'x', description: '一次関数', normalizedExpression: 'x' },
+  { id: 'basis_x2', name: 'x^2', type: 'function', expression: 'x**2', latex: 'x^2', description: '二次関数', normalizedExpression: 'x**2' }, // x**2 for sympy
 ];
 
 const shuffleDeck = <T>(array: T[]): T[] => {
@@ -88,8 +88,9 @@ export function useGameState() {
     const seenExpressions = new Set<string>();
 
     for (const card of field) {
-      // APIサーバーからの戻り値は正規化されていると期待して文字比較
-      const expr = card.expression; 
+      // 正規化された式があればそれを使う、なければ生の式を使う
+      // これにより 2*x (normalized: x) と x (normalized: x) が同一とみなされる
+      const expr = card.normalizedExpression || card.expression; 
       
       if (!seenExpressions.has(expr)) {
         uniqueField.push(card);
@@ -130,9 +131,10 @@ export function useGameState() {
         }
 
         // 線形従属チェック（既に同じ関数がある場合は消滅）
-        const isDuplicate = targetPlayerState.field.some(c => c.expression === card.expression);
+        const cardExpr = card.normalizedExpression || card.expression;
+        const isDuplicate = targetPlayerState.field.some(c => (c.normalizedExpression || c.expression) === cardExpr);
         if (isDuplicate) {
-            console.log(`[Deploy] Duplicate detected: ${card.name} (${card.expression}) vanishes.`);
+            console.log(`[Deploy] Duplicate detected: ${card.name} (${cardExpr}) vanishes.`);
             // フィールドには追加しない
         } else {
             const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
@@ -258,7 +260,8 @@ export function useGameState() {
             id: newId,
             expression: currentResult.expression,
             latex: currentResult.latex,
-            name: currentResult.expression
+            name: currentResult.expression,
+            normalizedExpression: currentResult.normalizedExpression
           };
         }
         targetPlayer.field = checkLinearDependence(targetPlayer.field);
