@@ -290,18 +290,19 @@ export const GameBoard: React.FC = () => {
       </div>
 
       {/* Current Player's Hand */}
-      <div className="h-64 bg-white p-4 rounded-xl border-t-4 border-gray-300 shadow-inner overflow-x-auto">
+      <div className="bg-white p-4 rounded-xl border-t-4 border-gray-300 shadow-inner min-h-[280px]">
         <div className="text-gray-500 font-bold mb-2">
             {isPlayerTurn ? "Player 1's Hand" : "Player 2's Hand"}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-4">
           {currentPlayerState.hand.map(card => (
-            <CardComponent 
-              key={card.id} 
-              card={card} 
-              isSelected={selectedHandCardIds.includes(card.id)}
-              onClick={() => handleHandCardClick(card.id)}
-            />
+            <div key={card.id} className="flex-shrink-0">
+                <CardComponent 
+                  card={card} 
+                  isSelected={selectedHandCardIds.includes(card.id)}
+                  onClick={() => handleHandCardClick(card.id)}
+                />
+            </div>
           ))}
         </div>
       </div>
