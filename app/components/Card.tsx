@@ -7,12 +7,22 @@ interface CardProps {
   onClick?: () => void;
   isSelected?: boolean;
   disabled?: boolean;
-  style?: React.CSSProperties; // 追加: 外部からのスタイル制御用
-  onMouseEnter?: () => void;   // 追加: ホバー検知用
-  onMouseLeave?: () => void;   // 追加: ホバー解除用
+  style?: React.CSSProperties;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  variant?: 'hand' | 'field'; // UIの表示モード (手札用固定サイズ vs フィールド用可変サイズ)
 }
 
-export const Card: React.FC<CardProps> = ({ card, onClick, isSelected, disabled, style, onMouseEnter, onMouseLeave }) => {
+export const Card: React.FC<CardProps> = ({ 
+  card, 
+  onClick, 
+  isSelected, 
+  disabled, 
+  style, 
+  onMouseEnter, 
+  onMouseLeave,
+  variant = 'hand' 
+}) => {
   const isFunction = card.type === 'function';
   // 数学的な方眼紙風背景とセリフフォントを適用
   const bgColor = isFunction ? 'bg-white bg-math-grid' : 'bg-red-50 bg-math-grid';
@@ -24,13 +34,20 @@ export const Card: React.FC<CardProps> = ({ card, onClick, isSelected, disabled,
   
   const textColor = disabled ? 'text-gray-400' : 'text-gray-900';
 
+  // サイズクラスの決定
+  // field: コンテンツ量に応じて幅可変 (min-w-32 ~ max-w-[280px]), 高さ可変 (min-h-48)
+  // hand:  固定サイズ (w-32 h-48) レイアウト崩れ防止
+  const sizeClasses = variant === 'field'
+    ? 'w-auto min-w-32 max-w-[280px] h-auto min-h-48'
+    : 'w-32 h-48 lg:w-36 lg:h-52';
+
   return (
     <div
       className={`
         relative rounded-lg border-2 ${borderColor} ${bgColor} 
         shadow-md hover:shadow-2xl transition-all duration-300 ease-out cursor-pointer flex flex-col p-2
         math-font
-        w-32 h-48 lg:w-36 lg:h-52 select-none
+        ${sizeClasses} select-none
         ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : ''}
       `}
       style={style}
@@ -48,7 +65,7 @@ export const Card: React.FC<CardProps> = ({ card, onClick, isSelected, disabled,
       {/* Main Content: Math Formula */}
       <div className={`flex-1 flex flex-col items-center justify-center ${textColor}`}>
         {isFunction ? (
-          <div className="w-full text-center overflow-hidden">
+          <div className={`w-full text-center ${variant === 'field' ? 'break-words' : 'overflow-hidden'}`}>
              {/* 関数は大きく中央に表示 */}
             <div className="text-sm md:text-lg lg:text-xl">
               <BlockMath math={(card as FunctionCard).latex} />

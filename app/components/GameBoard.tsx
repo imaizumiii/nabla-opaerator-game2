@@ -246,6 +246,7 @@ export const GameBoard: React.FC = () => {
             <div key={card.id} className="pointer-events-auto">
                 <CardComponent 
                 card={card} 
+                variant="field"
                 onClick={() => handleFieldCardClick(card.id, false)}
                 />
             </div>
@@ -269,6 +270,7 @@ export const GameBoard: React.FC = () => {
             <div key={card.id} className="pointer-events-auto">
                 <CardComponent 
                 card={card} 
+                variant="field"
                 onClick={() => handleFieldCardClick(card.id, true)}
                 />
             </div>
