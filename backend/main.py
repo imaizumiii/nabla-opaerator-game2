@@ -51,7 +51,7 @@ def normalize_expr(expr, x_symbol):
         return expr
 
 @app.post("/calculate", response_model=CalculationResponse)
-async def calculate(req: CalculationRequest):
+def calculate(req: CalculationRequest):
     try:
         # 文字列をSymPyの式に変換
         # セキュリティ上のリスクがあるため、本来は入力を厳密に検証すべきだがプロトタイプとして許可
@@ -94,17 +94,25 @@ async def calculate(req: CalculationRequest):
         elif req.operation == 'multiply':
             if not req.operand:
                 raise HTTPException(status_code=400, detail="Operand required for multiplication")
-            op_expr = sympify(req.operand, locals={'x': x})
-            result = expr * op_expr
+            # 既にsympifyされた式同士の掛け算では、変数が別物として扱われる可能性がある
+            # そのため、両方の式を文字列結合してからsympifyするか、明示的にxを共有させる
+            
+            # 手法1: 文字列で結合してパースしなおす（安全）
+            # exprはすでにSymPyオブジェクトなので文字列化が必要
+            combined_expr_str = f"({req.expression}) * ({req.operand})"
+            result = sympify(combined_expr_str, locals={'x': x})
 
         elif req.operation == 'divide':
             if not req.operand:
                 raise HTTPException(status_code=400, detail="Operand required for division")
-            op_expr = sympify(req.operand, locals={'x': x})
-            # 簡易ゼロ割チェック
-            if op_expr == 0:
+            
+            # 手法1: 文字列で結合してパースしなおす
+            combined_expr_str = f"({req.expression}) / ({req.operand})"
+            result = sympify(combined_expr_str, locals={'x': x})
+            
+            # ゼロ割チェックはSymPyがzooを返すので後の判定で拾えるが、念のため
+            if result.is_infinite: # zoo (complex infinity) or oo or -oo
                  raise HTTPException(status_code=400, detail="Division by zero")
-            result = expr / op_expr
 
         elif req.operation == 'log':
             # 自然対数

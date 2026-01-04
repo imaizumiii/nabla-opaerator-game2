@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { GameState, PlayerState, FunctionCard, OperatorCard } from '../types/game';
 import { MathEngine, CalculationResult } from '../lib/math-engine';
 
@@ -90,6 +90,12 @@ export function useGameState() {
     },
     winner: null,
   });
+
+  // 最新のgameStateを保持するRef (非同期処理内での参照用)
+  const stateRef = React.useRef(gameState);
+  useEffect(() => {
+    stateRef.current = gameState;
+  }, [gameState]);
 
   // 初回レンダリング後（クライアントサイド）に初期ドローとシャッフルを実行
   useEffect(() => {
@@ -222,13 +228,16 @@ export function useGameState() {
         
         // 現在のgameStateを参照できないため、setStateのコールバック内で計算できないのが辛い。
         // -> しかし、useGameState内なので gameState は参照可能（クロージャ）
-        // ただし、最新の値でない可能性があるので、targetPlayerId から判断して処理する。
+        // ただし、最新の値でない可能性があるので、Refから取得する。
+        const currentGameState = stateRef.current;
         
         // ここでは簡易的に、現在の gameState を参照して計算を開始する。
-        const targetField = targetPlayerId === 'player' ? gameState.player.field : gameState.opponent.field;
+        const targetField = targetPlayerId === 'player' ? currentGameState.player.field : currentGameState.opponent.field;
         
-        // 並列で計算実行
-        const results = await Promise.all(targetField.map(async (card) => {
+        // 並列で計算実行するとサーバー負荷でタイムアウトする可能性があるため、直列実行に変更
+        const results: { id: string, result: CalculationResult }[] = [];
+
+        for (const card of targetField) {
              let currentResult: CalculationResult = { expression: card.expression, latex: card.latex, isZero: false };
              
              // ナブラ: 微分1回
@@ -244,8 +253,12 @@ export function useGameState() {
                      currentResult = res1;
                  }
              }
-             return { id: card.id, result: currentResult };
-        }));
+             // 結果の検証
+             console.log(`[AoE Log] ${card.name} -> ${currentResult.expression}`, currentResult);
+             results.push({ id: card.id, result: currentResult });
+        }
+        
+        console.log('[AoE Log] All results:', results);
 
         setGameState(prev => {
             const newState = { ...prev };
