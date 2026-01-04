@@ -8,6 +8,7 @@ type GameCard = FunctionCard | OperatorCard;
 export const GameBoard: React.FC = () => {
   const { gameState, applyOperator, deployFunction, drawCard, endTurn } = useGameState();
   const [selectedHandCardIds, setSelectedHandCardIds] = useState<string[]>([]);
+  const [hoveredHandCardId, setHoveredHandCardId] = useState<string | null>(null);
 
   // 現在のターンプレイヤーの手札などを取得
   const isPlayerTurn = gameState.currentPlayer === 'player';
@@ -222,20 +223,7 @@ export const GameBoard: React.FC = () => {
             {gameState.winner ? `Winner: ${gameState.winner === 'player' ? 'Player' : 'Opponent'}!` : `Current Turn: ${isPlayerTurn ? 'Player 1' : 'Player 2'}`}
         </div>
         <div className="flex gap-2">
-            <button 
-            onClick={drawCard}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-            disabled={!!gameState.winner}
-            >
-            Draw Card
-            </button>
-            <button 
-            onClick={endTurn}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-            disabled={!!gameState.winner}
-            >
-            End Turn
-            </button>
+           {/* Auto-managed phases, no manual buttons needed */}
         </div>
       </div>
 
@@ -290,20 +278,75 @@ export const GameBoard: React.FC = () => {
       </div>
 
       {/* Current Player's Hand */}
-      <div className="bg-white p-4 rounded-xl border-t-4 border-gray-300 shadow-inner min-h-[280px]">
-        <div className="text-gray-500 font-bold mb-2">
+      <div 
+        className="bg-white rounded-xl border-t-4 border-gray-300 shadow-inner relative overflow-hidden flex justify-center items-end pb-4 flex-shrink-0"
+        style={{ height: '320px', minHeight: '320px' }}
+      >
+        <div className="text-gray-500 font-bold absolute top-2 left-4 text-sm md:text-base z-0">
             {isPlayerTurn ? "Player 1's Hand" : "Player 2's Hand"}
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-4">
-          {currentPlayerState.hand.map(card => (
-            <div key={card.id} className="flex-shrink-0">
+        
+        <div className="relative h-full w-full max-w-2xl flex justify-center items-end">
+          {currentPlayerState.hand.map((card, index) => {
+            const totalCards = currentPlayerState.hand.length;
+            // 扇状の配置計算 (廃止 -> 直線配置)
+            // 中央を0とし、左右に展開
+            const centerIndex = (totalCards - 1) / 2;
+            const offsetFromCenter = index - centerIndex;
+            
+            // 角度計算 (廃止)
+            const rotation = 0;
+            
+            // Y軸のオフセット (廃止)
+            const yOffset = 0; 
+
+            // ホバー状態の計算
+            const isHovered = hoveredHandCardId === card.id;
+            const isSelected = selectedHandCardIds.includes(card.id);
+            
+            // ホバー時の隣接カード回避計算
+            let xTranslate = 0;
+            if (hoveredHandCardId) {
+                const hoveredIndex = currentPlayerState.hand.findIndex(c => c.id === hoveredHandCardId);
+                if (hoveredIndex !== -1) {
+                    const dist = index - hoveredIndex;
+                    if (dist < 0) xTranslate = -40; // 左に避ける (距離を少し増やす)
+                    if (dist > 0) xTranslate = 40;  // 右に避ける
+                    if (dist === 0) xTranslate = 0;
+                }
+            }
+
+            // スタイルオブジェクトの生成
+            const cardStyle: React.CSSProperties = {
+                position: 'absolute',
+                // 左端からの位置計算 (重ねる量を減らすため、間隔を広げる: 40px -> 80px)
+                left: `calc(50% + ${offsetFromCenter * 80}px)`, 
+                bottom: '10px', // 少し下げる (20px -> 10px)
+                transformOrigin: 'bottom center',
+                transform: `
+                    translateX(-50%) 
+                    translateX(${xTranslate}px)
+                    translateY(${isSelected ? -50 : isHovered ? -30 : yOffset}px) 
+                    rotate(${isHovered || isSelected ? 0 : rotation}deg) 
+                    scale(${isHovered ? 1.1 : 1}) 
+                `,
+                // translateYの上昇量も少し抑える (-60/-40 -> -50/-30)
+                zIndex: isHovered || isSelected ? 100 : index, // ホバー時は最前面
+                transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            };
+
+            return (
                 <CardComponent 
+                  key={card.id} 
                   card={card} 
-                  isSelected={selectedHandCardIds.includes(card.id)}
+                  style={cardStyle}
+                  isSelected={isSelected}
                   onClick={() => handleHandCardClick(card.id)}
+                  onMouseEnter={() => setHoveredHandCardId(card.id)}
+                  onMouseLeave={() => setHoveredHandCardId(null)}
                 />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       
