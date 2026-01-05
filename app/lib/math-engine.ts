@@ -43,6 +43,32 @@ export class MathEngine {
     return this.callApi(expression, 'inverse');
   }
 
+  static async checkLinearDependence(expressions: string[]): Promise<{ isDependent: boolean, dependentIndices: number[] }> {
+    try {
+      const res = await fetch('/api/py/check-linear-dependence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expressions }),
+      });
+
+      if (!res.ok) {
+         const errorData = await res.json().catch(() => ({}));
+         throw new Error(errorData.detail || `API error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      return {
+        isDependent: data.is_dependent,
+        dependentIndices: data.dependent_indices
+      };
+    } catch (e) {
+      console.error("Linear Dependence API Error:", e);
+      // エラー時は安全側に倒して重複なしとする（あるいは再スロー）
+      // ここではゲーム進行を止めないため重複なしとするが、ログは出す
+      return { isDependent: false, dependentIndices: [] };
+    }
+  }
+
   private static async callApi(expression: string, operation: string, operand?: string): Promise<CalculationResult> {
     try {
       const body: any = { expression, operation };
@@ -54,7 +80,10 @@ export class MathEngine {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `API error: ${res.status}`);
+      }
 
       const data = await res.json();
       
@@ -65,14 +94,10 @@ export class MathEngine {
         normalizedExpression: data.normalized_expression
       };
     } catch (e) {
-      console.error("Math API Error:", e);
-      // エラー時のフォールバック
-      return {
-        expression: expression,
-        latex: expression,
-        isZero: false,
-        normalizedExpression: expression // フォールバック時はそのまま
-      };
+      // エラーは上位(UI側)で処理させるためにそのままスローするが、
+      // 開発者コンソールには出しすぎないように制御してもよい。
+      // ここでは、useGameState側でcatchしてalertを出すので、単に再スローする。
+      throw e;
     }
   }
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly, solve
+from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly, solve, nan, zoo, wronskian
+from sympy.calculus.util import AccumBounds
 import sympy
 
 app = FastAPI()
@@ -15,6 +16,13 @@ class CalculationResponse(BaseModel):
     latex: str
     is_zero: bool
     normalized_expression: str
+
+class LinearDependenceRequest(BaseModel):
+    expressions: list[str]
+
+class LinearDependenceResponse(BaseModel):
+    is_dependent: bool
+    dependent_indices: list[int] # 従属している（削除すべき）関数のインデックス
 
 def normalize_expr(expr, x_symbol):
     """
@@ -50,6 +58,61 @@ def normalize_expr(expr, x_symbol):
         print(f"Normalization error: {e}")
         return expr
 
+@app.post("/check-linear-dependence", response_model=LinearDependenceResponse)
+def check_linear_dependence(req: LinearDependenceRequest):
+    try:
+        x = Symbol('x', real=True)
+        # 式をパース
+        exprs = [sympify(e, locals={'x': x}) for e in req.expressions]
+        
+        # 1. 重複（完全一致または定数倍）をチェック
+        # 先頭から順に見ていき、既に見たものと従属なら削除リストに入れる
+        dependent_indices = []
+        unique_exprs = [] # (index, expr)
+        
+        for i, expr in enumerate(exprs):
+            is_dep = False
+            for j, u_expr in unique_exprs:
+                # 定数倍チェック: simplify(expr / u_expr) が定数か
+                # または Wronskian が 0 か (2つの場合)
+                
+                # 0関数の扱いに注意
+                if expr == 0:
+                    # 0は常に従属扱いにする（あるいは消滅扱いだが、ここでは従属として報告）
+                    is_dep = True
+                    break
+                
+                if u_expr == 0:
+                    continue
+
+                # 比率チェック
+                try:
+                    ratio = simplify(expr / u_expr)
+                    if ratio.is_constant():
+                        is_dep = True
+                        break
+                except:
+                    pass
+                
+                # Wronskian チェック (より汎用的)
+                # w = wronskian([expr, u_expr], x)
+                # if simplify(w) == 0:
+                #     is_dep = True
+                #     break
+            
+            if is_dep:
+                dependent_indices.append(i)
+            else:
+                unique_exprs.append((i, expr))
+        
+        return {
+            "is_dependent": len(dependent_indices) > 0,
+            "dependent_indices": dependent_indices
+        }
+    except Exception as e:
+        print(f"Linear dependence check error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/calculate", response_model=CalculationResponse)
 def calculate(req: CalculationRequest):
     try:
@@ -75,20 +138,53 @@ def calculate(req: CalculationRequest):
             result = limit(expr, x, 0)
             
         elif req.operation == 'limit_sup':
-            # 上極限 (簡易実装: 最大値を返すロジック等は複雑なため、振動関数についてはルールベースで対応)
-            # SymPyには直接的なlimsup関数はあるが、数列用が多い。
-            # ここでは sin/cos の最大値を 1 として扱うなどの特例処理を入れる
-            expr_str = str(expr)
-            if 'sin' in expr_str or 'cos' in expr_str:
-                 result = sympify(1)
+            # 上極限 (limsup)
+            # 振動する場合は最大値を採用
+            res = limit(expr, x, oo)
+            
+            # AccumBounds を含む場合は、その最大値に置換して評価を試みる
+            # 例: x*sin(x) -> oo * AccumBounds(-1, 1) -> oo * 1 -> oo
+            if hasattr(res, 'has') and res.has(AccumBounds):
+                # .replace() が効かない場合があるため、atoms() で取得して subs で置換
+                bounds = res.atoms(AccumBounds)
+                for bound in bounds:
+                    res = res.subs(bound, bound.max)
+                result = res
+            elif isinstance(res, AccumBounds):
+                result = res.max
             else:
-                 result = limit(expr, x, oo) # 振動しなければ通常の極限と同じとみなす(簡易)
+                result = res
 
         elif req.operation == 'limit_inf':
-            # 負の無限大への極限 (x -> -∞)
-            # note: 以前の実装では下極限(liminf)的な処理が入っていたが、
-            # ゲームルール上「極限(-∞)」の方が一般的かつ実装しやすいため変更
-            # もし「下極限」カードが必要なら別オペレーションとして定義すべき
+            # Note: 通常の "x -> -∞" ではなく "下極限 (liminf)" として動作させるべきか？
+            # ユーザーの意図としては "liminf(x->oo)" の可能性が高いが、
+            # カード定義(operatorType)によっては "limit_inf" が "x -> -∞" を意味する場合と "liminf" を意味する場合がある。
+            # 今回の指示は「liminf(x->oo)は有効」とのことなので、
+            # req.operation == 'limit_inf' がもし "x -> -∞" 用なら、別途 'limit_sub' (liminf) を作るか、
+            # ここで分岐する必要がある。
+            # 一旦、既存の 'limit_inf' は "x -> -∞" として実装されていたが、
+            # 指示の文脈的に "limit_inf" カードは "x -> -∞" なのか "liminf x->oo" なのか確認が必要。
+            # しかし、指示「liminf(x→oo)は有効」に従い、liminf用のロジックを追加する。
+            # frontendの定義を見ると:
+            # { id: 'l_minf1', name: '極限(-∞)', type: 'operator', operatorType: 'limit_inf', description: 'x -> -∞' }
+            # とあるので、これは "x -> -∞" のこと。
+            # "liminf" (下極限) のカードは現在フロントエンドにない（上極限はある）。
+            # したがって、既存の 'limit_inf' (x->-oo) はそのままにし、
+            # 新たに 'limit_sub' (liminf) を追加するか、あるいは 'limit_sup' の対になる概念として扱うか。
+            # 今回は指示された「limsup」の修正を行い、
+            # 「liminf」については、もしカードが存在するなら同様に処理するが、
+            # "limit_inf" (x -> -∞) と混同しないように注意。
+            
+            # ユーザー指示: 「liminf(x→oo)は有効」
+            # しかし現状 'limit_inf' は x->-oo を指している。
+            # ここでは 'limit_inf' は x->-oo のままにし、
+            # limsup のロジックだけ修正し、もし将来的に liminf カードが追加されたら対応できるようにする。
+            # ただし、もしユーザーが "limit_inf" という名前で liminf を意図しているなら修正が必要。
+            # 文脈から、既存の "limit_sup" カードの話をしていると思われる。
+            
+            # 指示の「liminf」が既存の 'limit_inf' エンドポイントを指しているのか不明確だが、
+            # フロントエンドの定義は "極限(-∞)" なので、これは振動とは関係ない通常の極限。
+            # したがって、'limit_sup' のみを修正する。
             result = limit(expr, x, -oo)
 
         elif req.operation == 'multiply':
@@ -141,6 +237,16 @@ def calculate(req: CalculationRequest):
 
         else:
             raise HTTPException(status_code=400, detail="Unknown operation")
+
+        # 振動・不定形のチェック
+        # limit_sup (上極限) の場合は AccumBounds が解消されているはずなのでチェックを通過する
+        # 通常の limit (infinity/0) の場合は AccumBounds のままなのでここで弾かれる
+        # x*sin(x) -> oo * AccumBounds(-1, 1) のような場合、AccumBoundsが式の一部に含まれる
+        if isinstance(result, AccumBounds) or result.has(AccumBounds):
+            raise HTTPException(status_code=400, detail="Result oscillates (undefined limit)")
+        
+        if result == nan:
+             raise HTTPException(status_code=400, detail="Result is undefined (NaN)")
 
         # 簡約化
         result = simplify(result)

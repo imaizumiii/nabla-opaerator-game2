@@ -129,79 +129,87 @@ export function useGameState() {
     });
   }, []);
 
-  const checkLinearDependence = (field: FunctionCard[]): FunctionCard[] => {
-    const uniqueField: FunctionCard[] = [];
-    const seenExpressions = new Set<string>();
+  // 依存関係チェック (非同期)
+  // setGameStateの中で直接呼べないため、ロジックを分離
+  const resolveLinearDependence = async (field: FunctionCard[]): Promise<FunctionCard[]> => {
+    if (field.length <= 1) return field;
 
-    for (const card of field) {
-      // 正規化された式があればそれを使う、なければ生の式を使う
-      // これにより 2*x (normalized: x) と x (normalized: x) が同一とみなされる
-      const expr = card.normalizedExpression || card.expression; 
-      
-      if (!seenExpressions.has(expr)) {
-        uniqueField.push(card);
-        seenExpressions.add(expr);
-      } else {
-        console.log(`[LinearDependence] Removing duplicate: ${card.name} (${expr})`);
-      }
+    const expressions = field.map(c => c.expression);
+    const { isDependent, dependentIndices } = await MathEngine.checkLinearDependence(expressions);
+
+    if (isDependent && dependentIndices.length > 0) {
+        console.log(`[LinearDependence] Removing duplicates at indices:`, dependentIndices);
+        // インデックスが大きい方から削除すればズレない
+        // dependentIndices は昇順とは限らないのでソート
+        const sortedIndices = [...dependentIndices].sort((a, b) => b - a);
+        
+        const newField = [...field];
+        for (const index of sortedIndices) {
+            console.log(`[LinearDependence] Removing ${newField[index].name}`);
+            newField.splice(index, 1);
+        }
+        return newField;
     }
-    return uniqueField;
+    
+    return field;
   };
 
-  const deployFunction = useCallback((cardId: string, targetPlayerId: string) => {
-    setGameState(prev => {
-        if (prev.winner) return prev;
+  const deployFunction = useCallback(async (cardId: string, targetPlayerId: string) => {
+    // 非同期処理が必要なため、setGameStateの関数更新ではなく、
+    // 現在の状態(Ref)を取得して計算し、一括更新するパターンに変更
+    const currentState = stateRef.current;
+    
+    if (currentState.winner) return;
 
-        const newState = { ...prev };
-        newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
-        newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
+    const newState = { ...currentState };
+    newState.player = { ...currentState.player, field: [...currentState.player.field], hand: [...currentState.player.hand], deck: [...currentState.player.deck] };
+    newState.opponent = { ...currentState.opponent, field: [...currentState.opponent.field], hand: [...currentState.opponent.hand], deck: [...currentState.opponent.deck] };
 
-        const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
-        const cardIndex = currentPlayerState.hand.findIndex(c => c.id === cardId);
-        
-        if (cardIndex === -1) return prev;
-        
-        const card = currentPlayerState.hand[cardIndex];
-        if (card.type !== 'function') return prev;
+    const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+    const cardIndex = currentPlayerState.hand.findIndex(c => c.id === cardId);
+    
+    if (cardIndex === -1) return;
+    
+    const card = currentPlayerState.hand[cardIndex];
+    if (card.type !== 'function') return;
 
-        // 手札から削除
-        currentPlayerState.hand.splice(cardIndex, 1);
+    // 対象フィールドに追加
+    const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
+    
+    // フィールド枚数制限 (3枚まで) - 手札削除前にチェック
+    if (targetPlayerState.field.length >= 3) {
+        console.warn("Field is full (max 3 cards).");
+        return; // 操作をキャンセル（手札は削除しない）
+    }
 
-        // 対象フィールドに追加
-        const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
-        
-        // フィールド枚数制限 (3枚まで)
-        if (targetPlayerState.field.length >= 3) {
-            console.warn("Field is full (max 3 cards).");
-            return prev;
-        }
+    // 手札から削除
+    currentPlayerState.hand.splice(cardIndex, 1);
 
-        // 線形従属チェック（既に同じ関数がある場合は消滅）
-        const cardExpr = card.normalizedExpression || card.expression;
-        const isDuplicate = targetPlayerState.field.some(c => (c.normalizedExpression || c.expression) === cardExpr);
-        if (isDuplicate) {
-            console.log(`[Deploy] Duplicate detected: ${card.name} (${cardExpr}) vanishes.`);
-            // フィールドには追加しない
-        } else {
-            const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
-            targetPlayerState.field.push(newCard);
-        }
-        
-        // ターン終了処理 (関数展開後も自動でターン終了)
-        newState.turnCount = prev.turnCount + 1;
-        newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
+    // 仮にフィールドに追加
+    const newCard = { ...card, id: `${card.id}_deployed_${Date.now()}` } as FunctionCard;
+    const tempField = [...targetPlayerState.field, newCard];
+    
+    // 線形従属チェック (API)
+    const resolvedField = await resolveLinearDependence(tempField);
+    
+    // もし追加したカードが消えていたら（つまり従属していたら）、追加キャンセル扱い
+    // APIが「後ろにあるものを削除」する仕様なら、newCard (末尾) が消えるはず
+    targetPlayerState.field = resolvedField;
+    
+    // ターン終了処理
+    newState.turnCount = currentState.turnCount + 1;
+    newState.currentPlayer = currentState.currentPlayer === 'player' ? 'opponent' : 'player';
 
-        // 次のプレイヤーの自動ドロー
-        const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
-        while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
-          const card = nextPlayerState.deck.pop();
-          if (card) {
-            nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
-          }
-        }
+    // 次のプレイヤーの自動ドロー
+    const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+    while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+      const card = nextPlayerState.deck.pop();
+      if (card) {
+        nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+      }
+    }
 
-        return newState;
-    });
+    setGameState(newState);
   }, []);
 
   const applyOperator = useCallback(async (
@@ -217,121 +225,114 @@ export function useGameState() {
     const isNabla = operators.some(o => o.operatorType === 'nabla');
     const isLaplacian = operators.some(o => o.operatorType === 'laplacian');
 
+    const currentState = stateRef.current;
+    
     if ((isNabla || isLaplacian) && !targetId) {
         // 全体攻撃モード
         console.log('[applyOperator] AoE Mode triggered');
         
-        // 現在の状態から対象フィールドのカードを取得する必要があるが、
-        // Reactのstate更新関数内で非同期処理をループさせるのは難しいため、
-        // ここで一旦現在のフィールドを取得して計算を行う
-        // ※厳密には stale state の可能性があるが、この関数が呼ばれた時点でのスナップショットで計算する
-        
-        // 現在のgameStateを参照できないため、setStateのコールバック内で計算できないのが辛い。
-        // -> しかし、useGameState内なので gameState は参照可能（クロージャ）
-        // ただし、最新の値でない可能性があるので、Refから取得する。
-        const currentGameState = stateRef.current;
-        
         // ここでは簡易的に、現在の gameState を参照して計算を開始する。
-        const targetField = targetPlayerId === 'player' ? currentGameState.player.field : currentGameState.opponent.field;
+        const targetField = targetPlayerId === 'player' ? currentState.player.field : currentState.opponent.field;
         
         // 並列で計算実行するとサーバー負荷でタイムアウトする可能性があるため、直列実行に変更
         const results: { id: string, result: CalculationResult }[] = [];
 
-        for (const card of targetField) {
-             let currentResult: CalculationResult = { expression: card.expression, latex: card.latex, isZero: false };
-             
-             // ナブラ: 微分1回
-             if (isNabla) {
-                 currentResult = await MathEngine.differentiate(currentResult.expression);
-             }
-             // ラプラシアン: 微分2回
-             if (isLaplacian) {
-                 const res1 = await MathEngine.differentiate(currentResult.expression);
-                 if (!res1.isZero) {
-                     currentResult = await MathEngine.differentiate(res1.expression);
-                 } else {
-                     currentResult = res1;
+        try {
+            for (const card of targetField) {
+                 let currentResult: CalculationResult = { expression: card.expression, latex: card.latex, isZero: false };
+                 
+                 // ナブラ: 微分1回
+                 if (isNabla) {
+                     currentResult = await MathEngine.differentiate(currentResult.expression);
                  }
-             }
-             // 結果の検証
-             console.log(`[AoE Log] ${card.name} -> ${currentResult.expression}`, currentResult);
-             results.push({ id: card.id, result: currentResult });
+                 // ラプラシアン: 微分2回
+                 if (isLaplacian) {
+                     const res1 = await MathEngine.differentiate(currentResult.expression);
+                     if (!res1.isZero) {
+                         currentResult = await MathEngine.differentiate(res1.expression);
+                     } else {
+                         currentResult = res1;
+                     }
+                 }
+                 // 結果の検証
+                 console.log(`[AoE Log] ${card.name} -> ${currentResult.expression}`, currentResult);
+                 results.push({ id: card.id, result: currentResult });
+            }
+        } catch (e: any) {
+            console.error("AoE Calculation Error:", e);
+            alert(`無効な計算です。\n詳細: ${e.message}`);
+            return;
         }
         
         console.log('[AoE Log] All results:', results);
 
-        setGameState(prev => {
-            const newState = { ...prev };
-            // Deep Copyに近い形で行う
-            newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
-            newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
-            
-            const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
-            const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+        const newState = { ...currentState };
+        // Deep Copyに近い形で行う
+        newState.player = { ...currentState.player, field: [...currentState.player.field], hand: [...currentState.player.hand], deck: [...currentState.player.deck] };
+        newState.opponent = { ...currentState.opponent, field: [...currentState.opponent.field], hand: [...currentState.opponent.hand], deck: [...currentState.opponent.deck] };
+        
+        const targetPlayerState = targetPlayerId === 'player' ? newState.player : newState.opponent;
+        const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
 
-            // 計算結果を適用
-            results.forEach(({ id, result }) => {
-                const index = targetPlayerState.field.findIndex(c => c.id === id);
-                if (index !== -1) {
-                    if (result.isZero) {
-                        targetPlayerState.field.splice(index, 1);
-                         // spliceでインデックスがずれるとforループだと困るが、findIndexなら都度検索するのでOK
-                         // ただし、mapの結果を適用しているので、IDで探すのが安全
-                    } else {
-                         const oldCard = targetPlayerState.field[index];
-                         targetPlayerState.field[index] = {
-                             ...oldCard,
-                             id: `${oldCard.id.split('_u_')[0]}_u_${Date.now()}`,
-                             expression: result.expression,
-                             latex: result.latex,
-                             name: result.expression,
-                             normalizedExpression: result.normalizedExpression
-                         };
-                    }
-                }
-            });
-
-            // 線形従属チェック
-            targetPlayerState.field = checkLinearDependence(targetPlayerState.field);
-
-            // 手札消費
-            for (const operator of operators) {
-                const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
-                if (opIndex !== -1) {
-                    currentPlayerState.hand.splice(opIndex, 1);
+        // 計算結果を適用
+        results.forEach(({ id, result }) => {
+            const index = targetPlayerState.field.findIndex(c => c.id === id);
+            if (index !== -1) {
+                if (result.isZero) {
+                    targetPlayerState.field.splice(index, 1);
+                } else {
+                        const oldCard = targetPlayerState.field[index];
+                        targetPlayerState.field[index] = {
+                            ...oldCard,
+                            id: `${oldCard.id.split('_u_')[0]}_u_${Date.now()}`,
+                            expression: result.expression,
+                            latex: result.latex,
+                            name: result.expression,
+                            normalizedExpression: result.normalizedExpression
+                        };
                 }
             }
-
-            // 勝利判定
-            if (newState.opponent.field.length === 0) {
-                newState.winner = 'player';
-            } else if (newState.player.field.length === 0) {
-                newState.winner = 'opponent';
-            }
-
-             // ターン終了処理
-            if (!newState.winner) {
-                newState.turnCount = prev.turnCount + 1;
-                newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
-
-                const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
-                while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
-                  const card = nextPlayerState.deck.pop();
-                  if (card) {
-                    nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
-                  }
-                }
-            }
-
-            return newState;
         });
 
+        // 線形従属チェック (API)
+        targetPlayerState.field = await resolveLinearDependence(targetPlayerState.field);
+
+        // 手札消費
+        for (const operator of operators) {
+            const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
+            if (opIndex !== -1) {
+                currentPlayerState.hand.splice(opIndex, 1);
+            }
+        }
+
+        // 勝利判定
+        if (newState.opponent.field.length === 0) {
+            newState.winner = 'player';
+        } else if (newState.player.field.length === 0) {
+            newState.winner = 'opponent';
+        }
+
+            // ターン終了処理
+        if (!newState.winner) {
+            newState.turnCount = currentState.turnCount + 1;
+            newState.currentPlayer = currentState.currentPlayer === 'player' ? 'opponent' : 'player';
+
+            const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+            while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
+                const card = nextPlayerState.deck.pop();
+                if (card) {
+                nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+                }
+            }
+        }
+
+        setGameState(newState);
         return; // AoE終了
     }
 
     // 通常処理 (Single Target)
     if (!targetCard) return; // AoE以外でターゲットなしはエラー
-    // ... (以下既存処理)
+    
     let operandExpression: string | undefined;
     if (operandCard) {
         operandExpression = operandCard.expression;
@@ -396,90 +397,88 @@ export function useGameState() {
           currentResult = nextResult;
           console.log(`[Math] Result:`, currentResult);
       }
-    } catch(e) {
+    } catch(e: any) {
       console.error(e);
+      alert(`無効な計算です。\n詳細: ${e.message}`);
       return;
     }
 
-    setGameState(prev => {
-      console.log('[Update] Applying state update');
-      const newState = { ...prev };
-      // 状態更新時はデッキも含めてshallow copyを作成する
-      newState.player = { ...prev.player, field: [...prev.player.field], hand: [...prev.player.hand], deck: [...prev.player.deck] };
-      newState.opponent = { ...prev.opponent, field: [...prev.opponent.field], hand: [...prev.opponent.hand], deck: [...prev.opponent.deck] };
+    // Single Target Update
+    const newState = { ...currentState };
+    // Deep Copy
+    newState.player = { ...currentState.player, field: [...currentState.player.field], hand: [...currentState.player.hand], deck: [...currentState.player.deck] };
+    newState.opponent = { ...currentState.opponent, field: [...currentState.opponent.field], hand: [...currentState.opponent.hand], deck: [...currentState.opponent.deck] };
 
-      const targetPlayer = targetPlayerId === 'player' ? newState.player : newState.opponent;
-      const targetCardIndex = targetPlayer.field.findIndex(c => c.id === targetId);
-      
-      console.log(`[Update] Target Index: ${targetCardIndex}`);
+    const targetPlayer = targetPlayerId === 'player' ? newState.player : newState.opponent;
+    const targetCardIndex = targetPlayer.field.findIndex(c => c.id === targetId);
+    
+    console.log(`[Update] Target Index: ${targetCardIndex}`);
 
-      if (targetCardIndex !== -1) {
-        if (currentResult.isZero) {
-          console.log('[Update] Card removed (isZero)');
-          targetPlayer.field.splice(targetCardIndex, 1);
-        } else {
-          const oldId = targetPlayer.field[targetCardIndex].id;
-          const newId = `${oldId.split('_u_')[0]}_u_${Date.now()}`;
-          console.log(`[Update] Updating card ${oldId} -> ${newId} with expression: ${currentResult.expression}`);
-          
-          targetPlayer.field[targetCardIndex] = {
-            ...targetPlayer.field[targetCardIndex],
-            // IDを更新して再レンダリングを強制する
-            id: newId,
-            expression: currentResult.expression,
-            latex: currentResult.latex,
-            name: currentResult.expression,
-            normalizedExpression: currentResult.normalizedExpression
-          };
+    if (targetCardIndex !== -1) {
+    if (currentResult.isZero) {
+        console.log('[Update] Card removed (isZero)');
+        targetPlayer.field.splice(targetCardIndex, 1);
+    } else {
+        const oldId = targetPlayer.field[targetCardIndex].id;
+        const newId = `${oldId.split('_u_')[0]}_u_${Date.now()}`;
+        console.log(`[Update] Updating card ${oldId} -> ${newId} with expression: ${currentResult.expression}`);
+        
+        targetPlayer.field[targetCardIndex] = {
+        ...targetPlayer.field[targetCardIndex],
+        id: newId,
+        expression: currentResult.expression,
+        latex: currentResult.latex,
+        name: currentResult.expression,
+        normalizedExpression: currentResult.normalizedExpression
+        };
+    }
+    // 線形従属チェック (API)
+    targetPlayer.field = await resolveLinearDependence(targetPlayer.field);
+    } else {
+        console.warn(`[Update] Target card ${targetId} not found during update phase.`);
+    }
+
+    // 手札消費: 演算子カード（すべて消費）
+    const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
+    
+    for (const operator of operators) {
+        const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
+        if (opIndex !== -1) {
+        currentPlayerState.hand.splice(opIndex, 1);
         }
-        targetPlayer.field = checkLinearDependence(targetPlayer.field);
-      } else {
-          console.warn(`[Update] Target card ${targetId} not found during update phase.`);
-      }
+    }
 
-      // 手札消費: 演算子カード（すべて消費）
-      const currentPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
-      
-      for (const operator of operators) {
-          const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
-          if (opIndex !== -1) {
-            currentPlayerState.hand.splice(opIndex, 1);
-          }
-      }
+    // 手札消費: オペランドとして使った関数カード
+    if (operandCard) {
+        const operandIndex = currentPlayerState.hand.findIndex(c => c.id === operandCard.id);
+        if (operandIndex !== -1) {
+            currentPlayerState.hand.splice(operandIndex, 1);
+        }
+    }
 
-      // 手札消費: オペランドとして使った関数カード
-      if (operandCard) {
-          const operandIndex = currentPlayerState.hand.findIndex(c => c.id === operandCard.id);
-          if (operandIndex !== -1) {
-              currentPlayerState.hand.splice(operandIndex, 1);
-          }
-      }
+    // 勝利判定
+    if (newState.opponent.field.length === 0) {
+    newState.winner = 'player';
+    } else if (newState.player.field.length === 0) {
+    newState.winner = 'opponent';
+    }
 
-      // 勝利判定
-      if (newState.opponent.field.length === 0) {
-        newState.winner = 'player';
-      } else if (newState.player.field.length === 0) {
-        newState.winner = 'opponent';
-      }
-
-      // 計算完了時に自動でターン終了（勝負が決まっていない場合）
-      if (!newState.winner) {
-        newState.turnCount = prev.turnCount + 1;
-        newState.currentPlayer = prev.currentPlayer === 'player' ? 'opponent' : 'player';
+    // 計算完了時に自動でターン終了（勝負が決まっていない場合）
+    if (!newState.winner) {
+        newState.turnCount = currentState.turnCount + 1;
+        newState.currentPlayer = currentState.currentPlayer === 'player' ? 'opponent' : 'player';
 
         // 次のプレイヤーの自動ドロー
         const nextPlayerState = newState.currentPlayer === 'player' ? newState.player : newState.opponent;
         while (nextPlayerState.hand.length < 7 && nextPlayerState.deck.length > 0) {
-          const card = nextPlayerState.deck.pop();
-          if (card) {
-            nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
-          }
+            const card = nextPlayerState.deck.pop();
+            if (card) {
+                nextPlayerState.hand.push({ ...card, id: `${card.id}_${Date.now()}_${nextPlayerState.hand.length}` });
+            }
         }
-      }
+    }
 
-      return newState;
-    });
-
+    setGameState(newState);
   }, []);
 
   const drawCard = useCallback(() => {
