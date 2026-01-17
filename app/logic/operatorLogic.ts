@@ -73,11 +73,14 @@ export const applyAoEOperator = async (
   // 線形従属チェック (API)
   targetPlayerState.field = await resolveLinearDependence(targetPlayerState.field);
 
-  // 手札消費
+  // 手札消費: 演算子カード（すべて消費）
+  // 同じIDのカードが複数枚ある場合でも、使用したカードを1枚ずつ消費
   for (const operator of operators) {
     const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
     if (opIndex !== -1) {
       currentPlayerState.hand.splice(opIndex, 1);
+    } else {
+      console.warn(`[operatorLogic] Operator card ${operator.id} not found in hand`);
     }
   }
 };
@@ -214,18 +217,24 @@ export const applySingleTargetOperator = async (
   }
 
   // 手札消費: 演算子カード（すべて消費）
+  // 同じIDのカードが複数枚ある場合でも、使用したカードを1枚ずつ消費
   for (const operator of operators) {
     const opIndex = currentPlayerState.hand.findIndex(c => c.id === operator.id);
     if (opIndex !== -1) {
       currentPlayerState.hand.splice(opIndex, 1);
+    } else {
+      console.warn(`[operatorLogic] Operator card ${operator.id} not found in hand`);
     }
   }
 
   // 手札消費: オペランドとして使った関数カード（すべて消費）
+  // 同じIDのカードが複数枚ある場合でも、使用したカードを1枚ずつ消費
   for (const operandCard of operandArray) {
     const operandIndex = currentPlayerState.hand.findIndex(c => c.id === operandCard.id);
     if (operandIndex !== -1) {
       currentPlayerState.hand.splice(operandIndex, 1);
+    } else {
+      console.warn(`[operatorLogic] Operand card ${operandCard.id} not found in hand`);
     }
   }
 };

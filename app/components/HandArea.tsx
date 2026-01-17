@@ -43,14 +43,17 @@ export const HandArea: React.FC<HandAreaProps> = ({
           const yOffset = 0; 
 
           // ホバー状態の計算
-          const isHovered = hoveredHandCardId === card.id;
-          const isSelected = selectedHandCardIds.includes(card.id);
+          const cardIdWithIndex = `${card.id}_${index}`;
+          const isHovered = hoveredHandCardId === cardIdWithIndex;
+          const isSelected = selectedHandCardIds.includes(cardIdWithIndex);
           
           // ホバー時の隣接カード回避計算
           let xTranslate = 0;
           if (hoveredHandCardId) {
-            const hoveredIndex = hand.findIndex(c => c.id === hoveredHandCardId);
-            if (hoveredIndex !== -1) {
+            // hoveredHandCardIdは "cardId_index" の形式
+            const hoveredIndexStr = hoveredHandCardId.split('_').pop();
+            const hoveredIndex = hoveredIndexStr ? parseInt(hoveredIndexStr, 10) : -1;
+            if (hoveredIndex !== -1 && !isNaN(hoveredIndex)) {
               const dist = index - hoveredIndex;
               if (dist < 0) xTranslate = -40; // 左に避ける (距離を少し増やす)
               if (dist > 0) xTranslate = 40;  // 右に避ける
@@ -79,12 +82,12 @@ export const HandArea: React.FC<HandAreaProps> = ({
 
           return (
             <CardComponent 
-              key={card.id} 
+              key={`${card.id}_${index}`} 
               card={card} 
               style={cardStyle}
               isSelected={isSelected}
-              onClick={() => onCardClick(card.id)}
-              onMouseEnter={() => onCardHover(card.id)}
+              onClick={() => onCardClick(`${card.id}_${index}`)}
+              onMouseEnter={() => onCardHover(`${card.id}_${index}`)}
               onMouseLeave={() => onCardHover(null)}
             />
           );

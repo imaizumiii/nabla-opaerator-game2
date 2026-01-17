@@ -192,7 +192,10 @@ export const GameBoard: React.FC = () => {
         isPlayerTurn={isPlayerTurn}
         selectedHandCardIds={selectedHandCardIds}
         hoveredHandCardId={hoveredHandCardId}
-        onCardClick={(cardId) => handleHandCardClick(cardId, currentPlayerState.hand)}
+        onCardClick={(cardIdWithIndex) => {
+          // cardIdWithIndexは "cardId_index" の形式
+          handleHandCardClick(cardIdWithIndex, currentPlayerState.hand);
+        }}
         onCardHover={setHoveredHandCardId}
       />
       

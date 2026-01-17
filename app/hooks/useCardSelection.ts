@@ -18,22 +18,49 @@ export const useCardSelection = () => {
   };
 
   const handleHandCardClick = (
-    cardId: string,
+    cardIdOrIndexed: string,
     hand: (FunctionCard | OperatorCard)[]
   ) => {
-    const card = findHandCard(cardId, hand);
+    // cardIdOrIndexedは "cardId" または "cardId_index" の形式
+    let cardId: string;
+    let cardIndex: number | undefined;
+    
+    if (cardIdOrIndexed.includes('_') && !isNaN(parseInt(cardIdOrIndexed.split('_').pop() || '', 10))) {
+      // インデックス付きIDの場合
+      const parts = cardIdOrIndexed.split('_');
+      cardIndex = parseInt(parts[parts.length - 1], 10);
+      cardId = parts.slice(0, -1).join('_');
+    } else {
+      // 通常のIDの場合
+      cardId = cardIdOrIndexed;
+      cardIndex = hand.findIndex(c => c.id === cardId);
+    }
+    
+    const card = cardIndex !== undefined && cardIndex !== -1 
+      ? hand[cardIndex] 
+      : findHandCard(cardId, hand);
     if (!card) return;
 
     // 現在選択されているカードのリストを取得
     const currentSelectedCards = selectedHandCardIds
-      .map(id => findHandCard(id, hand))
+      .map(id => {
+        // インデックス付きIDから元のIDを抽出
+        const baseId = id.includes('_') && !isNaN(parseInt(id.split('_').pop() || '', 10))
+          ? id.split('_').slice(0, -1).join('_')
+          : id;
+        return findHandCard(baseId, hand);
+      })
       .filter((c): c is GameCard => c !== undefined);
       
-    const isAlreadySelected = selectedHandCardIds.includes(cardId);
+    // インデックス付きIDで選択状態をチェック
+    const cardIdWithIndex = cardIndex !== undefined && cardIndex !== -1
+      ? `${cardId}_${cardIndex}`
+      : cardId;
+    const isAlreadySelected = selectedHandCardIds.includes(cardIdWithIndex);
 
     // 既に選択済みなら解除
     if (isAlreadySelected) {
-      setSelectedHandCardIds(prev => prev.filter(id => id !== cardId));
+      setSelectedHandCardIds(prev => prev.filter(id => id !== cardIdWithIndex));
       return;
     }
 
@@ -51,27 +78,30 @@ export const useCardSelection = () => {
         // 演算子の枚数分のオペランドが必要
         if (existingOperands.length < multiplyDivideOps.length) {
           // まだ足りない場合は追加
-          setSelectedHandCardIds(prev => [...prev, cardId]);
+          setSelectedHandCardIds(prev => [...prev, cardIdWithIndex]);
         } else {
           // 既に十分な場合は、最後のオペランドを入れ替え
           const operandIds = selectedHandCardIds.filter(id => {
-            const c = findHandCard(id, hand);
+            const baseId = id.includes('_') && !isNaN(parseInt(id.split('_').pop() || '', 10))
+              ? id.split('_').slice(0, -1).join('_')
+              : id;
+            const c = findHandCard(baseId, hand);
             return c && c.type === 'function';
           });
           const lastOperandId = operandIds[operandIds.length - 1];
           setSelectedHandCardIds(prev => [
             ...prev.filter(id => id !== lastOperandId),
-            cardId
+            cardIdWithIndex
           ]);
         }
       } 
       // ケース2: 何も選択されていない -> 関数展開用として単一選択
       else if (currentSelectedCards.length === 0) {
-        setSelectedHandCardIds([cardId]);
+        setSelectedHandCardIds([cardIdWithIndex]);
       }
       // ケース3: その他 -> 全選択解除して、これを新規選択
       else {
-        setSelectedHandCardIds([cardId]);
+        setSelectedHandCardIds([cardIdWithIndex]);
       }
 
     } else if (card.type === 'operator') {
@@ -87,30 +117,35 @@ export const useCardSelection = () => {
         );
 
         if (isStackable) {
-          setSelectedHandCardIds(prev => [...prev, cardId]);
+          setSelectedHandCardIds(prev => [...prev, cardIdWithIndex]);
         } else {
           // 混ぜられないものが選択されていたらリセットして新規選択
-          setSelectedHandCardIds([cardId]);
+          setSelectedHandCardIds([cardIdWithIndex]);
         }
       }
-      // ケース2: 乗算・除算 -> 複数選択（スタック）可能（同タイプのみ）
+      // ケース2: 乗算・除算 -> 複数選択（スタック）可能（同タイプのみ、同じIDのカードも複数選択可能）
       else if (opCard.operatorType === 'multiply' || opCard.operatorType === 'divide') {
-        // 現在の選択がすべて「乗算」か「除算」か「未選択」なら追加可能
-        const isStackable = currentSelectedCards.every(c => 
-          c.type === 'operator' && 
-          ((c as OperatorCard).operatorType === 'multiply' || (c as OperatorCard).operatorType === 'divide')
+        // 現在選択されている演算子カードを取得
+        const selectedOperators = currentSelectedCards.filter(c => c.type === 'operator') as OperatorCard[];
+        const selectedFunctions = currentSelectedCards.filter(c => c.type === 'function') as FunctionCard[];
+        
+        // 演算子カードがすべて「乗算」か「除算」なら追加可能
+        // 関数カード（オペランド）が選択されていても問題なし
+        const isStackable = selectedOperators.length === 0 || selectedOperators.every(op => 
+          op.operatorType === 'multiply' || op.operatorType === 'divide'
         );
 
         if (isStackable) {
-          setSelectedHandCardIds(prev => [...prev, cardId]);
+          // 同じIDのカードも複数選択可能（インデックス付きIDを使用）
+          setSelectedHandCardIds(prev => [...prev, cardIdWithIndex]);
         } else {
           // 混ぜられないものが選択されていたらリセットして新規選択
-          setSelectedHandCardIds([cardId]);
+          setSelectedHandCardIds([cardIdWithIndex]);
         }
       }
       // ケース3: その他の演算子 -> 単一選択（既存の関数カード選択は解除）
       else {
-        setSelectedHandCardIds([cardId]);
+        setSelectedHandCardIds([cardIdWithIndex]);
       }
     }
   };
@@ -121,7 +156,25 @@ export const useCardSelection = () => {
 
   const getSelectedCards = (hand: (FunctionCard | OperatorCard)[]): GameCard[] => {
     return selectedHandCardIds
-      .map(id => findHandCard(id, hand))
+      .map(id => {
+        // インデックス付きIDから元のIDを抽出
+        let baseId = id;
+        let cardIndex: number | undefined;
+        
+        if (id.includes('_') && !isNaN(parseInt(id.split('_').pop() || '', 10))) {
+          const parts = id.split('_');
+          cardIndex = parseInt(parts[parts.length - 1], 10);
+          baseId = parts.slice(0, -1).join('_');
+        }
+        
+        // インデックスが指定されている場合は、そのインデックスのカードを返す
+        if (cardIndex !== undefined && cardIndex !== -1 && hand[cardIndex]?.id === baseId) {
+          return hand[cardIndex];
+        }
+        
+        // 通常のID検索
+        return findHandCard(baseId, hand);
+      })
       .filter((c): c is GameCard => c !== undefined);
   };
 
