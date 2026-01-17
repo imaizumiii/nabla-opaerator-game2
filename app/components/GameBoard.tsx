@@ -107,7 +107,7 @@ export const GameBoard: React.FC = () => {
         // フィールド上限チェック
         const currentField = isPlayerField ? gameState.player.field : gameState.opponent.field;
         if (currentField.length >= 3) {
-            alert("Maximum of 3 function cards allowed on the field.");
+            alert("フィールドに配置できる関数は３枚までです。");
             return;
         }
 
@@ -154,14 +154,14 @@ export const GameBoard: React.FC = () => {
       const targetCard = targetField.find(c => c.id === targetId);
       
       if (!targetCard) {
-          console.error("Target card not found in UI state");
+          console.error("ターゲットカードが見つかりません");
           return;
       }
 
       // 乗算・除算チェック
       if (operators.some(op => op.operatorType === 'multiply' || op.operatorType === 'divide')) {
           if (functions.length === 0) {
-              alert("Please select a function card from your hand to combine with.");
+              alert("手札から関数カードを選択してください。");
               return;
           }
           applyOperator(operators, targetId, targetOwnerId, targetCard, functions[0]);

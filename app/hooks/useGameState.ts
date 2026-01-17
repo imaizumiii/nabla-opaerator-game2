@@ -259,7 +259,7 @@ export function useGameState() {
                  results.push({ id: card.id, result: currentResult });
             }
         } catch (e: any) {
-            console.error("AoE Calculation Error:", e);
+            console.error("全体攻撃計算エラー:", e);
             alert(`無効な計算です。\n詳細: ${e.message}`);
             return;
         }
@@ -343,7 +343,7 @@ export function useGameState() {
     if (operators.length === 1) {
         const opType = operators[0].operatorType;
         if ((opType === 'multiply' || opType === 'divide') && !operandExpression) {
-            console.error("Operand required for multiply/divide");
+            console.error("オペランドが必要です（乗算・除算）");
             return;
         }
     }
