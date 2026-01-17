@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useGameState } from '../hooks/useGameState';
 import { useCardSelection } from '../hooks/useCardSelection';
 import { FieldArea } from './FieldArea';
 import { HandArea } from './HandArea';
+import { OperatorOrderPanel } from './OperatorOrderPanel';
 import { getActionMessage } from '../utils/gameBoardHelpers';
 import { OperatorCard, FunctionCard } from '../types/game';
 
@@ -19,6 +20,24 @@ export const GameBoard: React.FC = () => {
     getSelectedCards,
     findHandCard,
   } = useCardSelection();
+
+  // 順序変更UIの状態管理
+  const [showOrderPanel, setShowOrderPanel] = useState(false);
+  const [orderedOperators, setOrderedOperators] = useState<OperatorCard[]>([]);
+  const [orderedOperands, setOrderedOperands] = useState<FunctionCard[]>([]);
+  const [pendingAction, setPendingAction] = useState<{
+    targetId: string | null;
+    targetOwnerId: string;
+    targetCard: FunctionCard | null;
+    originalOperators: OperatorCard[]; // 元の演算子リスト全体
+    multiplyDivideIndices: number[]; // 乗算・除算のインデックス
+  } | null>(null);
+
+  // 順序変更時のコールバック（メモ化）
+  const handleOrderChanged = useCallback((newOperators: OperatorCard[], newOperands: FunctionCard[]) => {
+    setOrderedOperators(newOperators);
+    setOrderedOperands(newOperands);
+  }, []);
 
   // 現在のターンプレイヤーの手札などを取得
   const isPlayerTurn = gameState.currentPlayer === 'player';
@@ -75,7 +94,7 @@ export const GameBoard: React.FC = () => {
         // AoEの場合は、ターゲットIDがなくても（フィールドクリック等で）実行可能
         const aoETargetOwnerId = isPlayerField ? 'player' : 'opponent';
 
-        applyOperator(operators, null, aoETargetOwnerId, null, functions[0]);
+        applyOperator(operators, null, aoETargetOwnerId, null, functions.length > 0 ? functions : undefined);
         clearSelection();
         return;
       }
@@ -93,8 +112,35 @@ export const GameBoard: React.FC = () => {
       }
 
       // 乗算・除算チェック
-      if (operators.some(op => op.operatorType === 'multiply' || op.operatorType === 'divide')) {
-        if (functions.length === 0) {
+      const multiplyDivideOps = operators.filter(op => op.operatorType === 'multiply' || op.operatorType === 'divide');
+      if (multiplyDivideOps.length > 1) {
+        // 複数の乗算・除算の場合は順序変更UIを表示
+        if (functions.length < multiplyDivideOps.length) {
+          alert(`乗算・除算の演算子が${multiplyDivideOps.length}枚選択されています。手札から関数カードを${multiplyDivideOps.length}枚選択してください。`);
+          return;
+        }
+        // 乗算・除算のインデックスを記録
+        const multiplyDivideIndices: number[] = [];
+        operators.forEach((op, index) => {
+          if (op.operatorType === 'multiply' || op.operatorType === 'divide') {
+            multiplyDivideIndices.push(index);
+          }
+        });
+        // 順序変更UIを表示するために状態を設定
+        setOrderedOperators([...multiplyDivideOps]);
+        setOrderedOperands([...functions.slice(0, multiplyDivideOps.length)]);
+        setPendingAction({ 
+          targetId, 
+          targetOwnerId, 
+          targetCard, 
+          originalOperators: [...operators],
+          multiplyDivideIndices 
+        });
+        setShowOrderPanel(true);
+        return;
+      } else if (multiplyDivideOps.length === 1) {
+        // 単一の乗算・除算の場合は通常通り実行
+        if (functions.length < 1) {
           alert("手札から関数カードを選択してください。");
           return;
         }
@@ -154,6 +200,53 @@ export const GameBoard: React.FC = () => {
       <div className="text-center text-sm text-gray-500 font-bold min-h-[1.5em]">
         {actionMessage}
       </div>
+
+      {/* 順序変更UI */}
+      {showOrderPanel && pendingAction && pendingAction.targetCard && (
+        <OperatorOrderPanel
+          targetCard={pendingAction.targetCard}
+          operators={orderedOperators}
+          operands={orderedOperands}
+          onOrderChanged={handleOrderChanged}
+          onConfirm={() => {
+            if (!pendingAction) return;
+            
+            // 順序変更後の演算子とオペランドで実行
+            // 元の演算子リストの順序を保持しつつ、乗算・除算の部分だけを順序変更後のものに置き換える
+            const finalOperators: OperatorCard[] = [];
+            let orderedIndex = 0;
+            
+            pendingAction.originalOperators.forEach((op, index) => {
+              if (pendingAction.multiplyDivideIndices.includes(index)) {
+                // この位置は乗算・除算なので、順序変更後のものを使用
+                finalOperators.push(orderedOperators[orderedIndex]);
+                orderedIndex++;
+              } else {
+                // その他の演算子は元の順序のまま
+                finalOperators.push(op);
+              }
+            });
+            
+            // オペランドは順序変更後の順序に対応（operatorLogic.tsで順序通りに適用される）
+            
+            applyOperator(
+              finalOperators,
+              pendingAction.targetId,
+              pendingAction.targetOwnerId,
+              pendingAction.targetCard,
+              orderedOperands
+            );
+            
+            clearSelection();
+            setShowOrderPanel(false);
+            setPendingAction(null);
+          }}
+          onCancel={() => {
+            setShowOrderPanel(false);
+            setPendingAction(null);
+          }}
+        />
+      )}
     </div>
   );
 };

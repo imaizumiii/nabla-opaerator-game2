@@ -102,7 +102,7 @@ export function useGameState() {
     targetId: string | null,
     targetPlayerId: string,
     targetCard: FunctionCard | null,
-    operandCard?: FunctionCard
+    operandCards?: FunctionCard | FunctionCard[]
   ) => {
     console.log(`[applyOperator] Start. TargetID: ${targetId}, Operators:`, operators.map(o => o.operatorType));
 
@@ -166,7 +166,7 @@ export function useGameState() {
         targetId!,
         targetPlayer,
         currentPlayerState,
-        operandCard
+        operandCards
       );
 
       // 勝利判定

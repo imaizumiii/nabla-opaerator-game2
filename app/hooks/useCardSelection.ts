@@ -40,14 +40,30 @@ export const useCardSelection = () => {
     if (card.type === 'function') {
       // --- 関数カードがクリックされた場合 ---
       
-      // ケース1: 乗算・除算の演算子が既に選択されている -> オペランドとして追加（1枚のみ）
-      const operatorCard = currentSelectedCards.find(c => c.type === 'operator') as OperatorCard | undefined;
-      if (operatorCard && operatorCard.operatorType && operatorCard.operatorType.match(/multiply|divide/)) {
-        // 既存の関数カード（オペランド）があれば入れ替え
-        setSelectedHandCardIds(prev => [
-          ...prev.filter(id => findHandCard(id, hand)?.type !== 'function'), 
-          cardId
-        ]);
+      // ケース1: 乗算・除算の演算子が既に選択されている -> オペランドとして追加（複数枚可能）
+      const operatorCards = currentSelectedCards.filter(c => c.type === 'operator') as OperatorCard[];
+      const multiplyDivideOps = operatorCards.filter(op => op.operatorType === 'multiply' || op.operatorType === 'divide');
+      
+      if (multiplyDivideOps.length > 0) {
+        // 既存の関数カード（オペランド）を取得
+        const existingOperands = currentSelectedCards.filter(c => c.type === 'function') as FunctionCard[];
+        
+        // 演算子の枚数分のオペランドが必要
+        if (existingOperands.length < multiplyDivideOps.length) {
+          // まだ足りない場合は追加
+          setSelectedHandCardIds(prev => [...prev, cardId]);
+        } else {
+          // 既に十分な場合は、最後のオペランドを入れ替え
+          const operandIds = selectedHandCardIds.filter(id => {
+            const c = findHandCard(id, hand);
+            return c && c.type === 'function';
+          });
+          const lastOperandId = operandIds[operandIds.length - 1];
+          setSelectedHandCardIds(prev => [
+            ...prev.filter(id => id !== lastOperandId),
+            cardId
+          ]);
+        }
       } 
       // ケース2: 何も選択されていない -> 関数展開用として単一選択
       else if (currentSelectedCards.length === 0) {
@@ -77,7 +93,22 @@ export const useCardSelection = () => {
           setSelectedHandCardIds([cardId]);
         }
       }
-      // ケース2: その他の演算子 -> 単一選択（既存の関数カード選択は解除）
+      // ケース2: 乗算・除算 -> 複数選択（スタック）可能（同タイプのみ）
+      else if (opCard.operatorType === 'multiply' || opCard.operatorType === 'divide') {
+        // 現在の選択がすべて「乗算」か「除算」か「未選択」なら追加可能
+        const isStackable = currentSelectedCards.every(c => 
+          c.type === 'operator' && 
+          ((c as OperatorCard).operatorType === 'multiply' || (c as OperatorCard).operatorType === 'divide')
+        );
+
+        if (isStackable) {
+          setSelectedHandCardIds(prev => [...prev, cardId]);
+        } else {
+          // 混ぜられないものが選択されていたらリセットして新規選択
+          setSelectedHandCardIds([cardId]);
+        }
+      }
+      // ケース3: その他の演算子 -> 単一選択（既存の関数カード選択は解除）
       else {
         setSelectedHandCardIds([cardId]);
       }

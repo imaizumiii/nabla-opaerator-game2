@@ -25,11 +25,15 @@ export const getActionMessage = (selectedCards: GameCard[]): string => {
     
     msg += parts.join(", ");
 
-    if (operators.some(op => op.operatorType === 'multiply' || op.operatorType === 'divide')) {
-      if (functions.length > 0) {
-        msg += ` with ${functions[0].name}`;
+    const multiplyDivideOps = operators.filter(op => op.operatorType === 'multiply' || op.operatorType === 'divide');
+    if (multiplyDivideOps.length > 0) {
+      if (functions.length >= multiplyDivideOps.length) {
+        // 必要な枚数分のオペランドが選択されている
+        const operandNames = functions.slice(0, multiplyDivideOps.length).map(f => f.name).join(", ");
+        msg += ` with ${operandNames}`;
       } else {
-        msg += " (Select a function card from hand)";
+        // オペランドが不足している
+        msg += ` (Select ${multiplyDivideOps.length} function card(s) from hand)`;
       }
     }
     

@@ -1,4 +1,4 @@
-import { GameState, FunctionCard } from '../types/game';
+import { GameState, FunctionCard, PlayerState } from '../types/game';
 import { resolveLinearDependence } from '../hooks/useLinearDependence';
 import { advanceTurn } from './turnLogic';
 
@@ -9,8 +9,8 @@ export const deployFunctionCard = async (
   gameState: GameState,
   card: FunctionCard,
   targetPlayerId: string,
-  currentPlayerState: { hand: FunctionCard[] },
-  targetPlayerState: { field: FunctionCard[] }
+  currentPlayerState: PlayerState,
+  targetPlayerState: PlayerState
 ): Promise<void> => {
   // フィールド枚数制限 (3枚まで) - 手札削除前にチェック
   if (targetPlayerState.field.length >= 3) {

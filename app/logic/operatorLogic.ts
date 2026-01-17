@@ -91,19 +91,22 @@ export const applySingleTargetOperator = async (
   targetId: string,
   targetPlayerState: { field: FunctionCard[] },
   currentPlayerState: { hand: (FunctionCard | OperatorCard)[] },
-  operandCard?: FunctionCard
+  operandCards?: FunctionCard | FunctionCard[]
 ): Promise<void> => {
-  let operandExpression: string | undefined;
-  if (operandCard) {
-    operandExpression = operandCard.expression;
-    console.log(`[applyOperator] Operand Expression: ${operandExpression}`);
-  }
+  // オペランドを配列に正規化
+  const operandArray: FunctionCard[] = Array.isArray(operandCards) 
+    ? operandCards 
+    : operandCards 
+      ? [operandCards] 
+      : [];
 
-  // 乗算・除算の場合はオペランドが必須 (単体演算子の場合)
-  if (operators.length === 1) {
-    const opType = operators[0].operatorType;
-    if ((opType === 'multiply' || opType === 'divide') && !operandExpression) {
-      throw new Error("オペランドが必要です（乗算・除算）");
+  // 乗算・除算の演算子を抽出
+  const multiplyDivideOps = operators.filter(op => op.operatorType === 'multiply' || op.operatorType === 'divide');
+  
+  // 乗算・除算の場合はオペランドが必須
+  if (multiplyDivideOps.length > 0) {
+    if (operandArray.length < multiplyDivideOps.length) {
+      throw new Error(`乗算・除算の演算子が${multiplyDivideOps.length}枚選択されていますが、オペランドが${operandArray.length}枚しかありません。`);
     }
   }
 
@@ -115,6 +118,8 @@ export const applySingleTargetOperator = async (
   };
 
   try {
+    let operandIndex = 0; // オペランドのインデックス
+    
     for (const operator of operators) {
       // すでに0になっていたら計算不要
       if (currentResult.isZero) break;
@@ -142,10 +147,24 @@ export const applySingleTargetOperator = async (
           nextResult = await MathEngine.limit(currentResult.expression, 'inf');
           break;
         case 'multiply':
-          if (operandExpression) nextResult = await MathEngine.multiply(currentResult.expression, operandExpression);
+          if (operandIndex < operandArray.length) {
+            const operandExpression = operandArray[operandIndex].expression;
+            console.log(`[applyOperator] Operand Expression (${operandIndex}): ${operandExpression}`);
+            nextResult = await MathEngine.multiply(currentResult.expression, operandExpression);
+            operandIndex++;
+          } else {
+            throw new Error("乗算に必要なオペランドが不足しています");
+          }
           break;
         case 'divide':
-          if (operandExpression) nextResult = await MathEngine.divide(currentResult.expression, operandExpression);
+          if (operandIndex < operandArray.length) {
+            const operandExpression = operandArray[operandIndex].expression;
+            console.log(`[applyOperator] Operand Expression (${operandIndex}): ${operandExpression}`);
+            nextResult = await MathEngine.divide(currentResult.expression, operandExpression);
+            operandIndex++;
+          } else {
+            throw new Error("除算に必要なオペランドが不足しています");
+          }
           break;
         case 'log':
           nextResult = await MathEngine.log(currentResult.expression);
@@ -202,8 +221,8 @@ export const applySingleTargetOperator = async (
     }
   }
 
-  // 手札消費: オペランドとして使った関数カード
-  if (operandCard) {
+  // 手札消費: オペランドとして使った関数カード（すべて消費）
+  for (const operandCard of operandArray) {
     const operandIndex = currentPlayerState.hand.findIndex(c => c.id === operandCard.id);
     if (operandIndex !== -1) {
       currentPlayerState.hand.splice(operandIndex, 1);
