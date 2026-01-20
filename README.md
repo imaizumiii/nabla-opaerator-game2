@@ -60,6 +60,10 @@ npm run dev
 
 ブラウザで [http://localhost:3000](http://localhost:3000) にアクセスするとゲームが開始します。
 
+## デプロイ
+
+本番環境へのデプロイ手順については、[DEPLOY.md](./DEPLOY.md) を参照してください。
+
 ## 開発ノート
 
 *   **API連携**: フロントエンドからの計算リクエストは `/api/py/*` に送られ、`next.config.ts` のRewrite設定により `http://localhost:8000/*` (Pythonサーバー) に転送されます。

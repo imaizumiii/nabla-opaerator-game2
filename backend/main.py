@@ -1,10 +1,21 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sympy import sympify, diff, integrate, limit, oo, latex, simplify, Symbol, log, sqrt, Poly, solve, nan, zoo, wronskian
 from sympy.calculus.util import AccumBounds
 import sympy
+import os
 
 app = FastAPI()
+
+# CORS設定（デプロイ時に必要）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 本番環境では特定のドメインを指定することを推奨
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class CalculationRequest(BaseModel):
     expression: str
