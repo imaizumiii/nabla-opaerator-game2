@@ -23,10 +23,10 @@ export const FieldArea: React.FC<FieldAreaProps> = ({
 
   return (
     <div 
-      className={`flex-1 p-4 rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer ${
+      className={`flex-1 p-2 sm:p-4 rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer min-h-[120px] sm:min-h-[150px] ${
         isCurrentTurn 
-          ? (isPlayerField ? 'bg-blue-100 border-4 border-blue-500 shadow-lg' : 'bg-red-100 border-4 border-red-500 shadow-lg')
-          : 'bg-gray-100 border-2 border-gray-300 opacity-80'
+          ? (isPlayerField ? 'bg-blue-100 border-2 sm:border-4 border-blue-500 shadow-lg' : 'bg-red-100 border-2 sm:border-4 border-red-500 shadow-lg')
+          : 'bg-gray-100 border border-gray-300 sm:border-2 opacity-80'
       }`}
       onClick={(e) => {
         // カードクリックイベントがバブリングしてきた場合は無視したいが、
@@ -38,10 +38,10 @@ export const FieldArea: React.FC<FieldAreaProps> = ({
         }
       }}
     >
-      <div className="absolute top-2 left-2 text-gray-800 font-bold opacity-50 pointer-events-none">
+      <div className="absolute top-1 left-1 sm:top-2 sm:left-2 text-gray-800 font-bold opacity-50 pointer-events-none text-xs sm:text-sm">
         {playerLabel} {isCurrentTurn && " [TURN]"}
       </div>
-      <div className="flex gap-4 flex-wrap justify-center pointer-events-none">
+      <div className="flex gap-2 sm:gap-4 flex-wrap justify-center pointer-events-none w-full px-2">
         {field.map(card => (
           <div key={card.id} className="pointer-events-auto">
             <CardComponent 
@@ -52,7 +52,7 @@ export const FieldArea: React.FC<FieldAreaProps> = ({
           </div>
         ))}
         {field.length === 0 && (
-          <div className={`text-2xl font-bold ${isPlayerField ? 'text-red-500' : 'text-red-400'}`}>
+          <div className={`text-base sm:text-xl md:text-2xl font-bold ${isPlayerField ? 'text-red-500' : 'text-red-400'}`}>
             0 Dimension (LOSE)
           </div>
         )}

@@ -36,10 +36,10 @@ export const Card: React.FC<CardProps> = ({
 
   // サイズクラスの決定
   // field: コンテンツ量に応じて幅可変 (min-w-32 ~ max-w-[280px]), 高さ可変 (min-h-48)
-  // hand:  固定サイズ (w-32 h-48) レイアウト崩れ防止
+  // hand:  固定サイズ (w-32 h-48) レイアウト崩れ防止、スマホでは小さく
   const sizeClasses = variant === 'field'
-    ? 'w-auto min-w-32 max-w-[280px] h-auto min-h-48'
-    : 'w-32 h-48 lg:w-36 lg:h-52';
+    ? 'w-auto min-w-24 sm:min-w-32 max-w-[200px] sm:max-w-[280px] h-auto min-h-36 sm:min-h-48'
+    : 'w-24 h-36 sm:w-28 sm:h-40 md:w-32 md:h-48 lg:w-36 lg:h-52';
 
   return (
     <div
@@ -56,18 +56,18 @@ export const Card: React.FC<CardProps> = ({
       onMouseLeave={onMouseLeave}
     >
       {/* Header: Card Type & Name (Small) */}
-      <div className="flex justify-between items-start border-b border-gray-100 pb-1 mb-1">
-         <span className={`text-[8px] md:text-[10px] font-bold uppercase tracking-wider ${isFunction ? 'text-blue-600' : 'text-red-600'}`}>
+      <div className="flex justify-between items-start border-b border-gray-100 pb-0.5 sm:pb-1 mb-0.5 sm:mb-1">
+         <span className={`text-[7px] sm:text-[8px] md:text-[10px] font-bold uppercase tracking-wider ${isFunction ? 'text-blue-600' : 'text-red-600'}`}>
             {isFunction ? 'Func' : 'Op'}
          </span>
       </div>
       
       {/* Main Content: Math Formula */}
-      <div className={`flex-1 flex flex-col items-center justify-center ${textColor}`}>
+      <div className={`flex-1 flex flex-col items-center justify-center ${textColor} px-1`}>
         {isFunction ? (
           <div className={`w-full text-center ${variant === 'field' ? 'break-words' : 'overflow-hidden'}`}>
              {/* 関数は大きく中央に表示 */}
-            <div className="text-sm md:text-lg lg:text-xl">
+            <div className="text-xs sm:text-sm md:text-lg lg:text-xl">
               <BlockMath math={(card as FunctionCard).latex} />
             </div>
           </div>
@@ -77,9 +77,9 @@ export const Card: React.FC<CardProps> = ({
             {card.type === 'operator' && (
                 <>
                     {/* 名称は小さめに */}
-                    <div className="text-[10px] md:text-xs font-semibold mb-1 opacity-80 truncate">{card.name}</div>
+                    <div className="text-[8px] sm:text-[10px] md:text-xs font-semibold mb-0.5 sm:mb-1 opacity-80 truncate">{card.name}</div>
                     
-                    <div className="text-lg md:text-xl lg:text-2xl">
+                    <div className="text-base sm:text-lg md:text-xl lg:text-2xl">
                         {(card as OperatorCard).operatorType === 'differential' && <BlockMath math="\frac{d}{dx}" />}
                         {(card as OperatorCard).operatorType === 'integral' && <BlockMath math="\int dx" />}
                         {(card as OperatorCard).operatorType === 'limit_infinity' && <BlockMath math="\lim_{x \to \infty}" />}
@@ -101,8 +101,8 @@ export const Card: React.FC<CardProps> = ({
       </div>
 
       {/* Footer: Description */}
-      <div className="mt-auto pt-1 border-t border-gray-100 hidden md:block">
-        <p className="text-[8px] md:text-[10px] text-gray-500 leading-tight text-center font-sans truncate">
+      <div className="mt-auto pt-0.5 sm:pt-1 border-t border-gray-100 hidden sm:block">
+        <p className="text-[7px] sm:text-[8px] md:text-[10px] text-gray-500 leading-tight text-center font-sans truncate">
           {card.description}
         </p>
       </div>

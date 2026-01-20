@@ -35,3 +35,21 @@ body {
 .math-font {
   font-family: "Times New Roman", Times, serif;
 }
+
+/* タッチ操作の最適化 */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* スマホでのスクロール最適化 */
+@media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  body {
+    overflow-x: hidden;
+  }
+}

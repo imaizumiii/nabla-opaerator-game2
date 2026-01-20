@@ -121,16 +121,23 @@ export const OperatorOrderPanel: React.FC<OperatorOrderPanelProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-2">演算の順序を変更</h2>
-        <p className="text-sm text-gray-600 mb-6">
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-[200] p-2 sm:p-4"
+      style={{ 
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)' // Safari対応
+      }}
+    >
+      <div className="bg-white rounded-lg p-3 sm:p-6 max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">演算の順序を変更</h2>
+        <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6">
           乗算・除算の順序によって計算結果が変わります。カードをドラッグして順序を変更してください。
         </p>
 
         {/* 計算工程を横並びで表示 */}
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-          <div className="flex items-center justify-center gap-3 flex-wrap min-h-[200px]">
+        <div className="mb-4 sm:mb-6 p-2 sm:p-4 bg-gray-50 rounded-lg border border-dashed sm:border-2 border-gray-300">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap min-h-[150px] sm:min-h-[200px]">
             {cards.map((cardItem, index) => (
               <div
                 key={cardItem.id}
@@ -139,43 +146,46 @@ export const OperatorOrderPanel: React.FC<OperatorOrderPanelProps> = ({
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
                 onDragLeave={handleDragLeave}
-                className={`flex-shrink-0 transition-all duration-200 ${
+                className={`flex-shrink-0 transition-opacity duration-200 ${
                   draggedIndex === index
-                    ? 'opacity-50 scale-95'
+                    ? 'opacity-50'
                     : dragOverIndex === index
-                    ? 'scale-110 z-10 border-2 border-blue-400 rounded-lg p-1 bg-blue-50'
-                    : 'hover:scale-105'
+                    ? 'z-10 rounded-lg bg-blue-50'
+                    : ''
                 }`}
                 style={{ cursor: 'grab' }}
               >
                 <Card
                   card={cardItem.card}
                   variant="field"
-                  disabled={true}
+                  disabled={false}
+                  onClick={() => {}} // クリック無効化
                 />
               </div>
             ))}
           </div>
-          {!isOrderValid && (
-            <div className="mt-3 text-center text-red-600 text-sm font-semibold">
-              ⚠️ カードは「関数、演算子、関数、演算子、関数」の順に並べてください
-            </div>
-          )}
+          <div className="mt-2 sm:mt-3 min-h-[20px] sm:min-h-[24px] flex items-center justify-center">
+            {!isOrderValid && (
+              <div className="text-center text-red-600 text-xs sm:text-sm font-semibold px-2">
+                ⚠️ カードは「関数、演算子、関数、演算子、関数」の順に並べてください
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+            className="px-4 py-2.5 sm:py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 active:bg-gray-500 transition-colors text-sm sm:text-base touch-manipulation"
           >
             キャンセル
           </button>
           <button
             onClick={onConfirm}
             disabled={!isOrderValid}
-            className={`px-4 py-2 rounded transition-colors ${
+            className={`px-4 py-2.5 sm:py-2 rounded transition-colors text-sm sm:text-base touch-manipulation ${
               isOrderValid
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                ? 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >

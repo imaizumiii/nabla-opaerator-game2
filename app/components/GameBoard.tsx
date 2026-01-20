@@ -157,11 +157,11 @@ export const GameBoard: React.FC = () => {
   const actionMessage = getActionMessage(getSelectedCards(currentPlayerState.hand));
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto p-4 gap-4 bg-gray-100">
+    <div className="flex flex-col h-screen max-w-4xl mx-auto p-2 sm:p-4 gap-2 sm:gap-4 bg-gray-100 overflow-hidden">
       {/* Header Info */}
-      <div className="flex justify-between items-center bg-white p-2 rounded shadow">
-        <div className="font-bold">Turn: {gameState.turnCount}</div>
-        <div className="text-xl font-bold text-blue-600">
+      <div className="flex justify-between items-center bg-white p-1.5 sm:p-2 rounded shadow flex-shrink-0">
+        <div className="text-xs sm:text-sm md:text-base font-bold">Turn: {gameState.turnCount}</div>
+        <div className="text-sm sm:text-lg md:text-xl font-bold text-blue-600 truncate ml-2">
           {gameState.winner 
             ? `Winner: ${gameState.winner === 'player' ? 'Player' : 'Opponent'}!` 
             : `Current Turn: ${isPlayerTurn ? 'Player 1' : 'Player 2'}`}
@@ -200,7 +200,7 @@ export const GameBoard: React.FC = () => {
       />
       
       {/* Footer / Instructions */}
-      <div className="text-center text-sm text-gray-500 font-bold min-h-[1.5em]">
+      <div className="text-center text-xs sm:text-sm text-gray-500 font-bold min-h-[1.5em] px-2 flex-shrink-0">
         {actionMessage}
       </div>
 
