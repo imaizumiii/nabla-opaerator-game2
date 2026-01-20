@@ -29,6 +29,7 @@ export const OperatorOrderPanel: React.FC<OperatorOrderPanelProps> = ({
 }) => {
   // 初期化フラグ（初回のみ初期化するため）
   const isInitialized = useRef(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   // 全カードのリストを管理（ターゲット関数 + 演算子 + オペランド）
   // 初期順序: [ターゲット関数, 演算子1, オペランド1, 演算子2, オペランド2]
@@ -48,6 +49,11 @@ export const OperatorOrderPanel: React.FC<OperatorOrderPanelProps> = ({
   // ドラッグ中のカードインデックス
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  
+  // タッチ操作用の状態
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const touchElementRef = useRef<HTMLDivElement | null>(null);
 
   // 順序が正しいかチェック（関数、演算子、関数、演算子、関数の交互）
   const isValidOrder = (cardList: CardWithId[]): boolean => {
@@ -120,70 +126,173 @@ export const OperatorOrderPanel: React.FC<OperatorOrderPanelProps> = ({
     setDragOverIndex(null);
   };
 
+  // スマホ判定
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // タッチ操作: タッチ開始
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    if (!isMobile) return;
+    const touch = e.touches[0];
+    setTouchStartY(touch.clientY);
+    setTouchStartX(touch.clientX);
+    setDraggedIndex(index);
+    touchElementRef.current = e.currentTarget as HTMLDivElement;
+  };
+
+  // タッチ操作: タッチ移動
+  const handleTouchMove = (e: React.TouchEvent, index: number) => {
+    if (!isMobile || draggedIndex === null || touchStartY === null || touchStartX === null) return;
+    
+    const touch = e.touches[0];
+    const deltaY = touch.clientY - touchStartY;
+    const deltaX = touch.clientX - touchStartX;
+    
+    // 横方向の移動が小さい場合はスクロールと判断
+    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) > 10) {
+      return;
+    }
+    
+    e.preventDefault();
+    
+    // カードを移動中の位置に表示
+    if (touchElementRef.current) {
+      touchElementRef.current.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      touchElementRef.current.style.opacity = '0.5';
+      touchElementRef.current.style.zIndex = '1000';
+    }
+    
+    // 他のカードとの位置関係を判定
+    const cardElements = document.querySelectorAll('[data-card-index]');
+    let newDragOverIndex: number | null = null;
+    
+    cardElements.forEach((el) => {
+      const cardIndex = parseInt(el.getAttribute('data-card-index') || '-1', 10);
+      if (cardIndex === -1 || cardIndex === draggedIndex) return;
+      
+      const rect = el.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      const centerX = rect.left + rect.width / 2;
+      
+      if (
+        touch.clientX >= rect.left &&
+        touch.clientX <= rect.right &&
+        touch.clientY >= rect.top &&
+        touch.clientY <= rect.bottom
+      ) {
+        newDragOverIndex = cardIndex;
+      }
+    });
+    
+    if (newDragOverIndex !== null && newDragOverIndex !== dragOverIndex) {
+      setDragOverIndex(newDragOverIndex);
+    }
+  };
+
+  // タッチ操作: タッチ終了
+  const handleTouchEnd = () => {
+    if (!isMobile || draggedIndex === null) return;
+    
+    if (touchElementRef.current) {
+      touchElementRef.current.style.transform = '';
+      touchElementRef.current.style.opacity = '';
+      touchElementRef.current.style.zIndex = '';
+    }
+    
+    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+      setCards(prev => {
+        const newCards = [...prev];
+        const [removed] = newCards.splice(draggedIndex, 1);
+        newCards.splice(dragOverIndex, 0, removed);
+        return newCards;
+      });
+    }
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setTouchStartY(null);
+    setTouchStartX(null);
+    touchElementRef.current = null;
+  };
+
   return (
     <div 
-      className="fixed inset-0 flex items-center justify-center z-[200] p-2 sm:p-4"
+      className="fixed inset-0 flex items-center justify-center z-[200] p-1 sm:p-4"
       style={{ 
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
         backdropFilter: 'blur(4px)',
         WebkitBackdropFilter: 'blur(4px)' // Safari対応
       }}
     >
-      <div className="bg-white rounded-lg p-3 sm:p-6 max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2">演算の順序を変更</h2>
-        <p className="text-xs sm:text-sm text-gray-600 mb-4 sm:mb-6">
-          乗算・除算の順序によって計算結果が変わります。カードをドラッグして順序を変更してください。
+      <div className={`bg-white rounded-lg ${isMobile ? 'p-2' : 'p-6'} max-w-5xl w-full ${isMobile ? 'max-h-[98vh]' : 'max-h-[90vh]'} ${isMobile ? '' : 'overflow-y-auto'}`}>
+        <h2 className={`${isMobile ? 'text-base mb-0.5' : 'text-xl mb-2'} font-bold`}>演算の順序を変更</h2>
+        <p className={`${isMobile ? 'text-[10px] mb-2' : 'text-sm mb-6'} text-gray-600`}>
+          {isMobile 
+            ? '乗算・除算の順序によって計算結果が変わります。カードを長押しして左右に移動して順序を変更してください。'
+            : '乗算・除算の順序によって計算結果が変わります。カードをドラッグして順序を変更してください。'}
         </p>
 
         {/* 計算工程を横並びで表示 */}
-        <div className="mb-4 sm:mb-6 p-2 sm:p-4 bg-gray-50 rounded-lg border border-dashed sm:border-2 border-gray-300">
-          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap min-h-[150px] sm:min-h-[200px]">
+        <div className={`${isMobile ? 'mb-2 p-0.5' : 'mb-6 p-4'} bg-gray-50 rounded-lg border border-dashed sm:border-2 border-gray-300`}>
+          <div className={`flex items-center ${isMobile ? 'justify-center overflow-x-auto' : 'justify-center flex-wrap'} ${isMobile ? 'gap-0' : 'gap-3'} ${isMobile ? 'min-h-[100px]' : 'min-h-[200px]'} ${isMobile ? '' : 'max-h-[40vh] sm:max-h-none'}`}>
             {cards.map((cardItem, index) => (
               <div
                 key={cardItem.id}
-                draggable
+                data-card-index={index}
+                draggable={!isMobile}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
                 onDragLeave={handleDragLeave}
-                className={`flex-shrink-0 transition-opacity duration-200 ${
+                onTouchStart={(e) => handleTouchStart(e, index)}
+                onTouchMove={(e) => handleTouchMove(e, index)}
+                onTouchEnd={handleTouchEnd}
+                className={`flex-shrink-0 transition-all duration-200 ${
                   draggedIndex === index
                     ? 'opacity-50'
                     : dragOverIndex === index
                     ? 'z-10 rounded-lg bg-blue-50'
                     : ''
-                }`}
-                style={{ cursor: 'grab' }}
+                } ${isMobile ? '-mx-1' : ''}`}
+                style={{ cursor: isMobile ? 'grab' : 'grab', touchAction: isMobile ? 'none' : 'auto' }}
               >
-                <Card
-                  card={cardItem.card}
-                  variant="field"
-                  disabled={false}
-                  onClick={() => {}} // クリック無効化
-                />
+                <div style={isMobile ? { transform: 'scale(0.7)', transformOrigin: 'center', margin: '-8px' } : undefined}>
+                  <Card
+                    card={cardItem.card}
+                    variant="field"
+                    disabled={false}
+                    onClick={() => {}} // クリック無効化
+                  />
+                </div>
               </div>
             ))}
           </div>
-          <div className="mt-2 sm:mt-3 min-h-[20px] sm:min-h-[24px] flex items-center justify-center">
+          <div className={`${isMobile ? 'mt-1 min-h-[16px]' : 'mt-3 min-h-[24px]'} flex items-center justify-center`}>
             {!isOrderValid && (
-              <div className="text-center text-red-600 text-xs sm:text-sm font-semibold px-2">
+              <div className={`text-center text-red-600 ${isMobile ? 'text-[10px] px-1' : 'text-sm px-2'} font-semibold`}>
                 ⚠️ カードは「関数、演算子、関数、演算子、関数」の順に並べてください
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+        <div className={`flex ${isMobile ? 'flex-col gap-1.5' : 'flex-row justify-end gap-3'}`}>
           <button
             onClick={onCancel}
-            className="px-4 py-2.5 sm:py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 active:bg-gray-500 transition-colors text-sm sm:text-base touch-manipulation"
+            className={`${isMobile ? 'px-3 py-2 text-xs' : 'px-4 py-2 text-base'} bg-gray-300 text-gray-700 rounded hover:bg-gray-400 active:bg-gray-500 transition-colors touch-manipulation`}
           >
             キャンセル
           </button>
           <button
             onClick={onConfirm}
             disabled={!isOrderValid}
-            className={`px-4 py-2.5 sm:py-2 rounded transition-colors text-sm sm:text-base touch-manipulation ${
+            className={`${isMobile ? 'px-3 py-2 text-xs' : 'px-4 py-2 text-base'} rounded transition-colors touch-manipulation ${
               isOrderValid
                 ? 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
