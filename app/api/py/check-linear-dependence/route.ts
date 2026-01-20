@@ -5,7 +5,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // バックエンドURLを環境変数から取得
-    const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    let backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    
+    // プロトコルがない場合は自動的にhttps://を追加
+    if (backendUrl && !backendUrl.startsWith('http://') && !backendUrl.startsWith('https://')) {
+      backendUrl = `https://${backendUrl}`;
+    }
     
     // バックエンドAPIにリクエストを転送
     const response = await fetch(`${backendUrl}/check-linear-dependence`, {
